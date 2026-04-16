@@ -815,8 +815,8 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
       const add = (label) => { if(!label)return; const item=carte.find(c=>c.label===label); if(!item)return; setPanier(p=>{const ei=p.findIndex(l=>l.produit===label); if(ei>=0){const c=[...p];c[ei]={...c[ei],qte:c[ei].qte+1};return c;} return [...p,{produit:label,prix_unitaire:item.prix,qte:1,typo:item.type}];}); setSelProd(""); };
       const upd = (i,d)=>setPanier(p=>{const c=[...p];c[i]={...c[i],qte:Math.max(1,c[i].qte+d)};return c;});
       const rem = (i)=>setPanier(p=>p.filter((_,j)=>j!==i));
-      const valider = async()=>{ if(!panier.length||!date)return; const now=Date.now(); const nr=panier.map((l,i)=>({id:now+i,date,semaine:getWeekForDate(date),mois:getMonthForDate(date),produit:l.produit,qte:l.qte,prix_unitaire:l.prix_unitaire,prix_total:parseFloat((l.prix_unitaire*l.qte).toFixed(2)),mode,typo:l.typo})); const upd=[...nr,...rows]; setRows(upd); setPanier([]); await saveData(cafe,"caisseta",upd); loadData(cafe,"caisseta").then(d=>{if(d&&d.length>=0)setRows(d);}); };
-      const del = async(id)=>{ setConfirmId(null); const u=rows.filter(r=>r.id!==id); setRows(u); await saveData(cafe,"caisseta",u); loadData(cafe,"caisseta").then(d=>{if(d&&d.length>=0)setRows(d);}); };
+      const valider = async()=>{ if(!panier.length||!date)return; const now=Date.now(); const nr=panier.map((l,i)=>({id:now+i,date,semaine:getWeekForDate(date),mois:getMonthForDate(date),produit:l.produit,qte:l.qte,prix_unitaire:l.prix_unitaire,prix_total:parseFloat((l.prix_unitaire*l.qte).toFixed(2)),mode,typo:l.typo})); const upd=[...nr,...rows]; setRows(upd); setPanier([]); await saveData(cafe,"caisseta",upd); };
+      const del = async(id)=>{ setConfirmId(null); const u=rows.filter(r=>r.id!==id); setRows(u); await saveData(cafe,"caisseta",u); };
       if(loading)return<div className="p-8 text-center text-gray-400">Chargement...</div>;
       const softs=carte.filter(c=>c.type==="Soft"), alcools=carte.filter(c=>c.type==="Alcool"), nourr=carte.filter(c=>c.type==="Snacking");
       return (
@@ -867,8 +867,8 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
       const [f,setF]=useState({date:new Date().toISOString().slice(0,10),evenement:"",pu:"",qte:"",montant:"",mode:"Espèces",commentaire:""});
       useEffect(()=>{loadData(cafe,"tcam").then(d=>{setRows(d);setLoading(false);});},[cafe,refreshTick]);
       const puV=parseFloat(f.pu)||0, qteV=parseFloat(f.qte)||0, hasC=puV>0&&qteV>0, tot=hasC?parseFloat((puV*qteV).toFixed(2)):(parseFloat(f.montant)||0);
-      const submit=async()=>{ if(!f.evenement||!f.date)return; const nr={id:Date.now(),date:f.date,semaine:getWeekForDate(f.date),mois:getMonthForDate(f.date),evenement:f.evenement,pu:puV,qte:qteV||null,montant:tot,mode:f.mode,commentaire:f.commentaire}; const upd=[nr,...rows]; setRows(upd); setF(x=>({...x,evenement:"",pu:"",qte:"",montant:"",commentaire:""})); await saveData(cafe,"tcam",upd); loadData(cafe,"tcam").then(d=>{if(d&&d.length>=0)setRows(d);}); };
-      const del=async(id)=>{ setConfirmId(null); const u=rows.filter(r=>r.id!==id); setRows(u); await saveData(cafe,"tcam",u); loadData(cafe,"tcam").then(d=>{if(d&&d.length>=0)setRows(d);}); };
+      const submit=async()=>{ if(!f.evenement||!f.date)return; const nr={id:Date.now(),date:f.date,semaine:getWeekForDate(f.date),mois:getMonthForDate(f.date),evenement:f.evenement,pu:puV,qte:qteV||null,montant:tot,mode:f.mode,commentaire:f.commentaire}; const upd=[nr,...rows]; setRows(upd); setF(x=>({...x,evenement:"",pu:"",qte:"",montant:"",commentaire:""})); await saveData(cafe,"tcam",upd); };
+      const del=async(id)=>{ setConfirmId(null); const u=rows.filter(r=>r.id!==id); setRows(u); await saveData(cafe,"tcam",u); };
       if(loading)return<div className="p-8 text-center text-gray-400">Chargement...</div>;
       return (
         <div className="space-y-6">
@@ -901,8 +901,8 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
       const [confirmId,setConfirmId]=useState(null);
       const [f,setF]=useState({date:new Date().toISOString().slice(0,10),produit:"Don",montant:"",mode:"CB",recu_fiscal:"non",commentaire:""});
       useEffect(()=>{loadData(cafe,"dons").then(d=>{setRows(d);setLoading(false);});},[cafe,refreshTick]);
-      const submit=async()=>{ if(!f.montant||!f.date)return; const nr={id:Date.now(),date:f.date,semaine:getWeekForDate(f.date),mois:getMonthForDate(f.date),produit:f.produit,montant:parseFloat(f.montant),mode:f.mode,recu_fiscal:f.recu_fiscal,commentaire:f.commentaire}; const upd=[nr,...rows]; setRows(upd); setF(x=>({...x,montant:"",commentaire:""})); await saveData(cafe,"dons",upd); loadData(cafe,"dons").then(d=>{if(d&&d.length>=0)setRows(d);}); };
-      const del=async(id)=>{ setConfirmId(null); const u=rows.filter(r=>r.id!==id); setRows(u); await saveData(cafe,"dons",u); loadData(cafe,"dons").then(d=>{if(d&&d.length>=0)setRows(d);}); };
+      const submit=async()=>{ if(!f.montant||!f.date)return; const nr={id:Date.now(),date:f.date,semaine:getWeekForDate(f.date),mois:getMonthForDate(f.date),produit:f.produit,montant:parseFloat(f.montant),mode:f.mode,recu_fiscal:f.recu_fiscal,commentaire:f.commentaire}; const upd=[nr,...rows]; setRows(upd); setF(x=>({...x,montant:"",commentaire:""})); await saveData(cafe,"dons",upd); };
+      const del=async(id)=>{ setConfirmId(null); const u=rows.filter(r=>r.id!==id); setRows(u); await saveData(cafe,"dons",u); };
       if(loading)return<div className="p-8 text-center text-gray-400">Chargement...</div>;
       return (
         <div className="space-y-6">
@@ -935,8 +935,8 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
       const [confirmId,setConfirmId]=useState(null);
       const [f,setF]=useState({date:new Date().toISOString().slice(0,10),fournisseur:"",destination:"TCAM+TA",montant:"",mode:"CB",no_facture:"",facture_teams:"non"});
       useEffect(()=>{loadData(cafe,"achats").then(d=>{setRows(d);setLoading(false);});},[cafe,refreshTick]);
-      const submit=async()=>{ if(!f.fournisseur||!f.montant)return; const nr={id:Date.now(),date:f.date,semaine:getWeekForDate(f.date),mois:getMonthForDate(f.date),fournisseur:f.fournisseur,destination:f.destination,montant:parseFloat(f.montant),mode:f.mode,no_facture:f.no_facture,facture_teams:f.facture_teams}; const upd=[nr,...rows]; setRows(upd); setF(x=>({...x,fournisseur:"",montant:"",no_facture:""})); await saveData(cafe,"achats",upd); loadData(cafe,"achats").then(d=>{if(d&&d.length>=0)setRows(d);}); };
-      const del=async(id)=>{ setConfirmId(null); const u=rows.filter(r=>r.id!==id); setRows(u); await saveData(cafe,"achats",u); loadData(cafe,"achats").then(d=>{if(d&&d.length>=0)setRows(d);}); };
+      const submit=async()=>{ if(!f.fournisseur||!f.montant)return; const nr={id:Date.now(),date:f.date,semaine:getWeekForDate(f.date),mois:getMonthForDate(f.date),fournisseur:f.fournisseur,destination:f.destination,montant:parseFloat(f.montant),mode:f.mode,no_facture:f.no_facture,facture_teams:f.facture_teams}; const upd=[nr,...rows]; setRows(upd); setF(x=>({...x,fournisseur:"",montant:"",no_facture:""})); await saveData(cafe,"achats",upd); };
+      const del=async(id)=>{ setConfirmId(null); const u=rows.filter(r=>r.id!==id); setRows(u); await saveData(cafe,"achats",u); };
       if(loading)return<div className="p-8 text-center text-gray-400">Chargement...</div>;
       return (
         <div className="space-y-6">
@@ -971,7 +971,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
       const [f,setF]=useState({date_evenement:"",client:"",montant_devis:"",devis_accepte:"OUI",montant_facture:"",date_reglement:"",mode:"Chèque"});
       useEffect(()=>{loadData(cafe,"privatisation").then(d=>{setRows(d);setLoading(false);});},[cafe,refreshTick]);
       const submit=async()=>{ if(!f.client)return; const nr={id:Date.now(),...f,semaine:getWeekForDate(f.date_evenement),mois:getMonthForDate(f.date_evenement),montant_devis:parseFloat(f.montant_devis)||0,montant_facture:parseFloat(f.montant_facture)||0}; const upd=[nr,...rows]; setRows(upd); await saveData(cafe,"privatisation",upd); setF({date_evenement:"",client:"",montant_devis:"",devis_accepte:"OUI",montant_facture:"",date_reglement:"",mode:"Chèque"}); };
-      const del=async(id)=>{ setConfirmId(null); const u=rows.filter(r=>r.id!==id); setRows(u); await saveData(cafe,"privatisation",u); loadData(cafe,"privatisation").then(d=>{if(d&&d.length>=0)setRows(d);}); };
+      const del=async(id)=>{ setConfirmId(null); const u=rows.filter(r=>r.id!==id); setRows(u); await saveData(cafe,"privatisation",u); };
       if(loading)return<div className="p-8 text-center text-gray-400">Chargement...</div>;
       return (
         <div className="space-y-6">
@@ -1183,14 +1183,24 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
       const fil=useCallback((arr)=>{ if(ft==="week")return arr.filter(r=>r.semaine===sw); if(ft==="month")return arr.filter(r=>r.mois===sm); return arr; },[ft,sw,sm]);
       const sum=(arr,k="prix_total")=>arr.reduce((s,r)=>s+(parseFloat(r[k])||0),0);
 
-      const stats=cafes.map(cafe=>{ const d=allCafesData[cafe]||{caisseta:[],tcam:[],dons:[],achats:[],privatisation:[],adhesion:[],restocollective:[]}; const fTA=fil(d.caisseta),fTC=fil(d.tcam),fD=fil(d.dons),fA=fil(d.achats),fP=fil(d.privatisation),fADH=fil(d.adhesion),fRC=fil(d.restocollective); const ta=sum(fTA),tc=sum(fTC,"montant"),dn=sum(fD,"montant"),ac=sum(fA,"montant"),pv=sum(fP,"montant_facture"),adh=sum(fADH,"total"),rc=sum(fRC,"prix_total"); return{cafe,ta,tc,dn,ac,pv,adh,rc,total:ta+tc+dn+pv+adh+rc,fTA,fTC,fD,fADH}; });
-      const GT=stats.reduce((s,c)=>({ta:s.ta+c.ta,tc:s.tc+c.tc,dn:s.dn+c.dn,ac:s.ac+c.ac,pv:s.pv+c.pv,adh:s.adh+c.adh,rc:s.rc+c.rc,total:s.total+c.total}),{ta:0,tc:0,dn:0,ac:0,pv:0,adh:0,rc:0,total:0});
+      const safeArr = a => Array.isArray(a) ? a : [];
+      const stats=cafes.map(cafe=>{ const d=allCafesData[cafe]||{}; const fTA=fil(safeArr(d.caisseta)),fTC=fil(safeArr(d.tcam)),fD=fil(safeArr(d.dons)),fA=fil(safeArr(d.achats)),fP=fil(safeArr(d.privatisation)),fADH=fil(safeArr(d.adhesion)),fRC=fil(safeArr(d.restocollective)); const ta=sum(fTA),tc=sum(fTC,"montant"),dn=sum(fD,"montant"),ac=sum(fA,"montant"),pv=sum(fP,"montant_facture"),adh=sum(fADH,"total"),rc=sum(fRC,"prix_total"); return{cafe,ta:n(ta),tc:n(tc),dn:n(dn),ac:n(ac),pv:n(pv),adh:n(adh),rc:n(rc),total:n(ta+tc+dn+pv+adh+rc),fTA,fTC,fD,fADH}; });
+      const n = v => (typeof v==='number' && isFinite(v)) ? v : 0;
+      const GT=stats.reduce((s,c)=>({ta:s.ta+n(c.ta),tc:s.tc+n(c.tc),dn:s.dn+n(c.dn),ac:s.ac+n(c.ac),pv:s.pv+n(c.pv),adh:s.adh+n(c.adh),rc:s.rc+n(c.rc),total:s.total+n(c.total)}),{ta:0,tc:0,dn:0,ac:0,pv:0,adh:0,rc:0,total:0});
 
       const weekly=WEEKS_2026.slice(0,20).map(w=>{ let ta=0,tc=0,dn=0,ac=0,adh=0; cafes.forEach(c=>{ const d=allCafesData[c]||{}; ta+=sum((d.caisseta||[]).filter(r=>r.semaine===w.label)); tc+=sum((d.tcam||[]).filter(r=>r.semaine===w.label),"montant"); dn+=sum((d.dons||[]).filter(r=>r.semaine===w.label),"montant"); ac+=sum((d.achats||[]).filter(r=>r.semaine===w.label),"montant"); adh+=sum((d.adhesion||[]).filter(r=>r.semaine===w.label),"total"); }); return{week:w.label,ta,tc,dn,ac,adh,total:ta+tc+dn+adh}; }).filter(r=>r.ta+r.tc+r.dn+r.ac+r.adh>0);
 
       const handleExport=()=>{ const p=ft==="week"?sw:ft==="month"?`M${sm}`:"all"; const rows=[]; cafes.forEach(c=>{ const d=allCafesData[c]||{}; const fn=r=>{ if(!r.date)return false; if(ft==="week")return r.semaine===sw; if(ft==="month")return r.mois===sm; return true; }; ["caisseta","tcam","dons","achats","privatisation"].forEach(s=>(d[s]||[]).filter(fn).forEach(r=>rows.push({Café:c,Section:s.toUpperCase(),TVA:"",...r}))); explodeAdhesion((d.adhesion||[]).filter(fn),c).forEach(r=>rows.push({...r,TVA:""})); (d.restocollective||[]).filter(fn).forEach(r=>rows.push({Café:c,Section:"RESTOCOLLECTIVE",TVA:r.tva_total?.toFixed(2)||"",...r})); }); buildAndDownloadCSV(rows,`DaddyCafe_GLOBAL_${p}_${new Date().toISOString().slice(0,10)}.csv`); };
 
 
+
+      // Ne pas render le dashboard tant que les données ne sont pas chargées
+      if (allCafesLoading && Object.keys(allCafesData).length === 0) {
+        return <div className="p-12 text-center">
+          <div className="text-4xl mb-4">⏳</div>
+          <p className="text-gray-500 font-medium">Chargement des données de tous les cafés…</p>
+        </div>;
+      }
 
       return (
         <div className="space-y-6">
@@ -1272,7 +1282,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
             {/* Récap hebdo */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><h4 className="text-sm font-semibold text-gray-700 mb-3">Récap. hebdomadaire — tous cafés</h4>
               {weekly.length===0?<p className="text-sm text-gray-400 text-center py-6">Aucune donnée</p>:<div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr className="bg-gray-50">{["Semaine","TA","TCAM","Dons","Adhés.","Achats","Total encaissé"].map(h=><th key={h} className="text-left px-3 py-2 text-gray-500 uppercase tracking-wide font-semibold">{h}</th>)}</tr></thead>
-              <tbody>{weekly.map(r=><tr key={r.week} className="border-t border-gray-50 hover:bg-gray-50"><td className="px-3 py-2 font-medium text-gray-700">{r.week}</td><td className="px-3 py-2 text-emerald-600">{r.ta.toFixed(2)} €</td><td className="px-3 py-2 text-amber-600">{r.tc.toFixed(2)} €</td><td className="px-3 py-2 text-rose-600">{r.dn.toFixed(2)} €</td><td className="px-3 py-2 text-indigo-600">{r.adh.toFixed(2)} €</td><td className="px-3 py-2 text-sky-600">−{r.ac.toFixed(2)} €</td><td className="px-3 py-2 font-bold text-gray-800">{r.total.toFixed(2)} €</td></tr>)}</tbody></table></div>}
+              <tbody>{weekly.map(r=><tr key={r.week} className="border-t border-gray-50 hover:bg-gray-50"><td className="px-3 py-2 font-medium text-gray-700">{r.week}</td><td className="px-3 py-2 text-emerald-600">{(r.ta||0).toFixed(2)} €</td><td className="px-3 py-2 text-amber-600">{(r.tc||0).toFixed(2)} €</td><td className="px-3 py-2 text-rose-600">{(r.dn||0).toFixed(2)} €</td><td className="px-3 py-2 text-indigo-600">{(r.adh||0).toFixed(2)} €</td><td className="px-3 py-2 text-sky-600">−{(r.ac||0).toFixed(2)} €</td><td className="px-3 py-2 font-bold text-gray-800">{(r.total||0).toFixed(2)} €</td></tr>)}</tbody></table></div>}
             </div>
             {/* ── PNL ANNUEL GLOBAL ── */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -1370,7 +1380,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
         setForm(mkAdhForm());
       };
 
-      const del = async (id) => { setConfirmId(null); const u=rows.filter(r=>r.id!==id); setRows(u); await saveData(cafe,"adhesion",u); loadData(cafe,"adhesion").then(d=>{if(d&&d.length>=0)setRows(d);}); };
+      const del = async (id) => { setConfirmId(null); const u=rows.filter(r=>r.id!==id); setRows(u); await saveData(cafe,"adhesion",u); };
 
       if(loading) return <div className="p-8 text-center text-gray-400">Chargement...</div>;
 
@@ -1641,10 +1651,10 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
         const upd=[...nr,...rows]; setRows(upd);
         setPanier([]);
         await saveData(cafe,"restocollective",upd);
-        loadData(cafe,"restocollective").then(d=>{if(d&&d.length>=0)setRows(d);});
+       
       };
 
-      const del = async(id)=>{ setConfirmId(null); const u=rows.filter(r=>r.id!==id); setRows(u); await saveData(cafe,"restocollective",u); loadData(cafe,"restocollective").then(d=>{if(d&&d.length>=0)setRows(d);}); };
+      const del = async(id)=>{ setConfirmId(null); const u=rows.filter(r=>r.id!==id); setRows(u); await saveData(cafe,"restocollective",u); };
 
       if(loading) return <div className="p-8 text-center text-gray-400">Chargement...</div>;
 
@@ -1868,14 +1878,10 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
       if (!session) {
                 return <LoginScreen onLogin={s=>{
           setSession(s);
-          if(s.role==="admin") {
+          if(s.role==="admin" || s.role==="operations") {
             setSelCafe(cafes[0]||null);
-            setGlobalView(true);
             setSubTabAdmin("dashboard");
-          } else if(s.role==="operations") {
-            setSelCafe(cafes[0]||null);
             setGlobalView(true);
-            setSubTabAdmin("dashboard");
           } else {
             setSelCafe(s.cafe);
             setGlobalView(false);
