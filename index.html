@@ -346,38 +346,32 @@ ${csv.slice(0,8000)}${csv.length>8000?"…(tronqué)":""}`
     };
     const getWeekForDate  = (s) => { if (!s) return ""; const d = new Date(s); for (const w of WEEKS_2026) { if (d >= w.start && d <= w.end) return w.label; } return ""; };
     const getMonthForDate = (s) => { if (!s) return null; return new Date(s).getMonth() + 1; };
-    /* ── Supabase direct — pas de cache mémoire (évite les données périmées) ── */
     const _lsKey = (cafe, section) => `daddy_fb_${cafe}_${section}`;
 
-    /* ── Test connexion Supabase au démarrage ── */
-    const SUPA_STATUS_KEY = "daddy_supa_ok";
-    let _supaOk = null; // null=inconnu, true=ok, false=KO
+    /* Cache mémoire : la source de vérité locale.
+       saveData écrit ici en premier → l'UI ne voit jamais de données périmées.
+       loadData lit ici si disponible → pas de rechargement Supabase inutile. */
+    const _memCache = new Map();
 
     const testSupabase = async () => {
       try {
         const r = await supaFetch("/rest/v1/daddy_data?limit=1&select=cafe");
-        if (r !== null) {
-          _supaOk = true;
-          try { localStorage.setItem(SUPA_STATUS_KEY, "ok"); } catch {}
-          window.dispatchEvent(new CustomEvent("supa_status", { detail: { ok: true } }));
-        } else {
-          _supaOk = false;
-          try { localStorage.setItem(SUPA_STATUS_KEY, "ko"); } catch {}
-          window.dispatchEvent(new CustomEvent("supa_status", { detail: { ok: false } }));
-        }
+        window.dispatchEvent(new CustomEvent("supa_status", { detail: { ok: r !== null } }));
       } catch {
-        _supaOk = false;
         window.dispatchEvent(new CustomEvent("supa_status", { detail: { ok: false } }));
       }
     };
-    testSupabase(); // lancer au chargement sans bloquer
+    testSupabase();
 
-    const loadData = async (cafe, section) => {
+    const loadData = async (cafe, section, bypassCache=false) => {
+      const key = cafe + ":" + section;
+      // Utiliser le cache mémoire sauf si on veut forcer un rechargement
+      if (!bypassCache && _memCache.has(key)) return _memCache.get(key);
       try {
         const rows = await supaFetch(`/rest/v1/daddy_data?cafe=eq.${encodeURIComponent(cafe)}&section=eq.${encodeURIComponent(section)}&select=data`);
         if (rows !== null) {
-          const v = (Array.isArray(rows) && rows.length > 0 && Array.isArray(rows[0].data)) ? rows[0].data : [];
-          // Mettre à jour le fallback localStorage
+          const v = (Array.isArray(rows) && rows.length > 0 && rows[0].data != null) ? rows[0].data : [];
+          _memCache.set(key, v);
           try { localStorage.setItem(_lsKey(cafe,section), JSON.stringify(v)); } catch{}
           return v;
         }
@@ -391,9 +385,12 @@ ${csv.slice(0,8000)}${csv.length>8000?"…(tronqué)":""}`
     };
 
     const saveData = async (cafe, section, data) => {
-      // Sauvegarder en localStorage comme backup
+      const key = cafe + ":" + section;
+      // 1. Cache mémoire en premier : l'UI reste cohérente immédiatement
+      _memCache.set(key, data);
+      // 2. localStorage comme backup hors-ligne
       try { localStorage.setItem(_lsKey(cafe,section), JSON.stringify(data)); } catch{}
-      // Envoyer à Supabase
+      // 3. Supabase (upsert)
       const res = await supaFetch("/rest/v1/daddy_data", {
         method: "POST",
         headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
@@ -407,7 +404,10 @@ ${csv.slice(0,8000)}${csv.length>8000?"…(tronqué)":""}`
       }
       return true;
     };
-    const invalidateCache = () => {}; // no-op, kept for compatibility
+    const invalidateCache = (cafe, section) => {
+      if (cafe && section) _memCache.delete(cafe+":"+section);
+      else _memCache.clear();
+    };
 
     /* ── PALETTE COULEURS DADDY ── */
     const CAFE_COLORS_LIST = ["#d3692D","#E59E00","#8CADA1","#284351","#D7D0BF","#d3692D","#E59E00","#8CADA1","#284351","#D7D0BF"];
@@ -549,6 +549,7 @@ ${csv.slice(0,8000)}${csv.length>8000?"…(tronqué)":""}`
                   <button onClick={()=>setShow(v=>!v)} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 text-xs">{show?"🙈":"👁️"}</button></div></div>
               {err&&<p className="text-xs text-rose-600 bg-rose-50 px-3 py-2 rounded-lg">{err}</p>}
               <button onClick={submit} style={{backgroundColor:ADMIN_COLOR}} className="w-full hover:opacity-90 text-white font-semibold py-3 rounded-xl transition-opacity shadow-sm">Se connecter</button>
+              <p className="text-center text-xs text-gray-400 mt-3">Build 16/04/2026 14:26</p>
               <p className="text-center text-xs text-gray-400 mt-3">v3.1 · Build du 15/04/2026 06:17</p>
             </div>
           </div>
@@ -1202,6 +1203,13 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
         </div>;
       }
 
+      if (allCafesLoading && Object.keys(allCafesData).length===0) {
+        return <div className="p-12 text-center text-gray-400">
+          <div className="text-3xl mb-3">⏳</div>
+          <p>Chargement des données…</p>
+        </div>;
+      }
+
       return (
         <div className="space-y-6">
           {isAdmin&&<div className="flex gap-2">
@@ -1834,15 +1842,17 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
         if (session?.role === "admin") checkAndSendAutoReports(cafes).catch(()=>{});
       }, [session]);
 
-      // Load carte when cafe changes
+      // Load carte uniquement quand le café change
+      // (pas au cafeRefreshTick — le cache mémoire garantit la cohérence locale)
       useEffect(()=>{
         if (!activeCafe) return;
         setCarteLoaded(false);
+        // bypassCache=true si on vient d'un 🔄 explicite (géré via invalidateCache)
         loadData(activeCafe, "carte").then(saved=>{
           setCarte(saved && saved.length > 0 ? saved : DEFAULT_CARTE);
           setCarteLoaded(true);
         });
-      }, [activeCafe, cafeRefreshTick]);
+      }, [activeCafe]);
 
       // Load all cafes data
       const _loadingRef = useRef(false);
@@ -1876,7 +1886,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
 
       // Login screen
       if (!session) {
-                return <LoginScreen onLogin={s=>{
+                        return <LoginScreen onLogin={s=>{
           setSession(s);
           if(s.role==="admin" || s.role==="operations") {
             setSelCafe(cafes[0]||null);
@@ -1889,7 +1899,13 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
         }}/>;
       }
 
-      const forceRefreshCafe = () => setCafeRefreshTick(t=>t+1);
+      const forceRefreshCafe = () => {
+        if (activeCafe) {
+          ["caisseta","tcam","dons","achats","privatisation","adhesion","restocollective","carte"]
+            .forEach(s => invalidateCache(activeCafe, s));
+        }
+        setCafeRefreshTick(t=>t+1);
+      };
 
       const headerStyle = (globalView || isAdmin)
         ? { background: `linear-gradient(to right, ${ADMIN_COLOR}, #8B1a1f)` }
