@@ -160,8 +160,8 @@
       "date","semaine","mois",
       "produit","evenement","fournisseur","client",
       "typo","type","destination",
-      "qte","prix_unitaire","pu",
-      "montant","prix_total","montant_facture","montant_devis",
+      "qte","pu",
+      "montant","montant_facture","montant_devis",
       "tva_rate","tva_unitaire","tva_total","ht_unitaire","ht_total",
       "mode","recu_fiscal","facture_teams","devis_accepte",
       "no_facture","date_evenement","date_reglement","commentaire","id"
@@ -180,14 +180,37 @@
     };
 
     /* ── COLLECT ALL DATA ── */
+    // Normalise une ligne pour le CSV : unifie les colonnes de montant/qte/pu
+    const normalizeRow = (r, section) => {
+      const out = {...r};
+      // Unifier quantité : qte (TA) et qte (TCAM ont rarement qte) → colonne unique "qte"
+      // (déjà ok, TA a qte, TCAM n'a pas qte → pas de conflit)
+      
+      // Unifier prix unitaire : prix_unitaire (TA) et pu (TCAM) → une seule colonne "pu"
+      if (out.prix_unitaire !== undefined) {
+        out.pu = out.prix_unitaire;
+        delete out.prix_unitaire;
+      }
+      // Unifier montant total : prix_total (TA) et montant (TCAM/Dons/Achats) → "montant"
+      if (out.prix_total !== undefined) {
+        out.montant = out.prix_total;
+        delete out.prix_total;
+      }
+      // Achats : montant en négatif (charges)
+      if (section === "achats" && out.montant !== undefined) {
+        out.montant = -Math.abs(parseFloat(out.montant) || 0);
+      }
+      return out;
+    };
+
     const collectAllData = async (cafes, filterFn) => {
       const rows = [];
       await Promise.all(cafes.map(async cafe => {
         const [ct,tc,dn,ac,pv,adh,rc] = await Promise.all(["caisseta","tcam","dons","achats","privatisation","adhesion","restocollective"].map(s=>loadData(cafe,s)));
         const all = [{s:"caisseta",d:ct},{s:"tcam",d:tc},{s:"dons",d:dn},{s:"achats",d:ac},{s:"privatisation",d:pv}];
-        all.forEach(({s,d})=>d.filter(filterFn).forEach(r=>rows.push({Café:cafe,Section:s.toUpperCase(),TVA:"",...r})));
+        all.forEach(({s,d})=>d.filter(filterFn).forEach(r=>rows.push({Café:cafe,Section:s.toUpperCase(),TVA:"",...normalizeRow(r,s)})));
         explodeAdhesion(adh.filter(filterFn), cafe).forEach(r=>rows.push({...r,TVA:""}));
-        rc.filter(filterFn).forEach(r=>rows.push({Café:cafe,Section:"RESTOCOLLECTIVE",TVA:r.tva_total?.toFixed(2)||"",...r}));
+        rc.filter(filterFn).forEach(r=>rows.push({Café:cafe,Section:"RESTOCOLLECTIVE",TVA:r.tva_total?.toFixed(2)||"",...normalizeRow(r,"restocollective")}));
       }));
       return rows;
     };
@@ -368,7 +391,7 @@ ${csv.slice(0,8000)}${csv.length>8000?"…(tronqué)":""}`
       // Utiliser le cache mémoire sauf si on veut forcer un rechargement
       if (!bypassCache && _memCache.has(key)) return _memCache.get(key);
       try {
-        const rows = await supaFetch(`/rest/v1/daddy_data?cafe=eq.${encodeURIComponent(cafe)}&section=eq.${encodeURIComponent(section)}&select=data`);
+        const rows = await supaFetch(`/rest/v1/daddy_data?cafe=eq.${encodeURIComponent(cafe)}&section=eq.${encodeURIComponent(section)}&select=data,updated_at&order=updated_at.desc&limit=1`);
         if (rows !== null) {
           const v = (Array.isArray(rows) && rows.length > 0 && rows[0].data != null) ? rows[0].data : [];
           _memCache.set(key, v);
@@ -386,23 +409,32 @@ ${csv.slice(0,8000)}${csv.length>8000?"…(tronqué)":""}`
 
     const saveData = async (cafe, section, data) => {
       const key = cafe + ":" + section;
-      // 1. Cache mémoire en premier : l'UI reste cohérente immédiatement
+      // 1. Cache mémoire immédiat — l'UI ne voit jamais de données périmées
       _memCache.set(key, data);
       // 2. localStorage comme backup hors-ligne
       try { localStorage.setItem(_lsKey(cafe,section), JSON.stringify(data)); } catch{}
-      // 3. Supabase (upsert)
-      const res = await supaFetch("/rest/v1/daddy_data", {
-        method: "POST",
-        headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
-        body: JSON.stringify({ cafe, section, data, updated_at: new Date().toISOString() })
-      });
-      if (res === null) {
+      // 3. Supabase : DELETE puis INSERT (évite les doublons sans contrainte UNIQUE)
+      try {
+        // Supprimer la ligne existante
+        await supaFetch(
+          `/rest/v1/daddy_data?cafe=eq.${encodeURIComponent(cafe)}&section=eq.${encodeURIComponent(section)}`,
+          { method: "DELETE", headers: { "Prefer": "return=minimal" } }
+        );
+        // Insérer la nouvelle version
+        const res = await supaFetch("/rest/v1/daddy_data", {
+          method: "POST",
+          headers: { "Prefer": "return=minimal" },
+          body: JSON.stringify({ cafe, section, data, updated_at: new Date().toISOString() })
+        });
+        if (res === null) throw new Error("INSERT failed");
+        return true;
+      } catch(e) {
+        console.error("saveData error:", cafe, section, e.message);
         _saveQueue.push({cafe, section, data, resolve: ()=>{}});
         _flushQueue();
         window.dispatchEvent(new CustomEvent("daddy_save_error", { detail: { cafe, section } }));
         return false;
       }
-      return true;
     };
     const invalidateCache = (cafe, section) => {
       if (cafe && section) _memCache.delete(cafe+":"+section);
@@ -549,7 +581,7 @@ ${csv.slice(0,8000)}${csv.length>8000?"…(tronqué)":""}`
                   <button onClick={()=>setShow(v=>!v)} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 text-xs">{show?"🙈":"👁️"}</button></div></div>
               {err&&<p className="text-xs text-rose-600 bg-rose-50 px-3 py-2 rounded-lg">{err}</p>}
               <button onClick={submit} style={{backgroundColor:ADMIN_COLOR}} className="w-full hover:opacity-90 text-white font-semibold py-3 rounded-xl transition-opacity shadow-sm">Se connecter</button>
-              <p className="text-center text-xs text-gray-400 mt-3">Build 16/04/2026 14:26</p>
+              <p className="text-center text-xs text-gray-400 mt-3">Build 24/04/2026 05:56</p>
               <p className="text-center text-xs text-gray-400 mt-3">v3.1 · Build du 15/04/2026 06:17</p>
             </div>
           </div>
@@ -1195,18 +1227,11 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
 
 
 
-      // Ne pas render le dashboard tant que les données ne sont pas chargées
+      // Afficher spinner uniquement si chargement EN COURS et aucune donnée encore
       if (allCafesLoading && Object.keys(allCafesData).length === 0) {
         return <div className="p-12 text-center">
           <div className="text-4xl mb-4">⏳</div>
-          <p className="text-gray-500 font-medium">Chargement des données de tous les cafés…</p>
-        </div>;
-      }
-
-      if (allCafesLoading && Object.keys(allCafesData).length===0) {
-        return <div className="p-12 text-center text-gray-400">
-          <div className="text-3xl mb-3">⏳</div>
-          <p>Chargement des données…</p>
+          <p className="text-gray-500 font-medium">Chargement des données…</p>
         </div>;
       }
 
@@ -1859,6 +1884,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
       const loadAllCafes = async (force=false) => {
         if (_loadingRef.current) return;
         if (allCafesLoaded && !force) return;
+        if (!cafes || cafes.length === 0) return; // rien à charger
         _loadingRef.current = true;
         setAllCafesLoading(true);
         if (force) setAllCafesLoaded(false);
@@ -1880,9 +1906,12 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
         }
       };
 
+      // Déclencher le chargement dès que globalView=true ET cafes disponibles
       useEffect(()=>{
-        if (globalView && !allCafesLoaded && !_loadingRef.current) loadAllCafes();
-      }, [globalView, allCafesLoaded]);
+        if (globalView && cafes.length > 0 && !allCafesLoaded && !_loadingRef.current) {
+          loadAllCafes();
+        }
+      }, [globalView, allCafesLoaded, cafes.length]);
 
       // Login screen
       if (!session) {
@@ -1892,6 +1921,10 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
             setSelCafe(cafes[0]||null);
             setSubTabAdmin("dashboard");
             setGlobalView(true);
+            // Forcer le chargement après le rendu (cafes sera disponible)
+            setTimeout(() => {
+              if (!_loadingRef.current) loadAllCafes();
+            }, 100);
           } else {
             setSelCafe(s.cafe);
             setGlobalView(false);
