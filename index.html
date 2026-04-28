@@ -159,8 +159,7 @@
 
     /* ── BUILD CSV STRING (sans téléchargement) ── */
     const CSV_COL_ORDER = [
-      "Café","Section",
-      "date","semaine","mois",
+      "Café","Section","date","semaine","mois",
       "produit","evenement","fournisseur","typo","destination",
       "qte","Prix de vente unitaire","HT_PU","tva_taux","tva_unitaire","tva_total","ht_total","montant TTC payé",
       "mode","facture_teams","no_facture","commentaire","id"
@@ -179,31 +178,35 @@
     };
 
     /* ── COLLECT ALL DATA ── */
-    // Normalise une ligne pour le CSV selon les colonnes cibles
+    // Normalise une ligne pour le CSV selon les colonnes cibles (spec La Madeleine)
     const normalizeRow = (r, section) => {
       const out = {};
-      // Colonnes identité (pas de renommage)
+      // Colonnes directes sans renommage
       ["date","semaine","mois","produit","evenement","fournisseur","typo","destination",
        "qte","mode","facture_teams","no_facture","commentaire","id"].forEach(k => {
         if (r[k] !== undefined) out[k] = r[k];
       });
-      // Prix de vente unitaire (TTC) : prix_unitaire (TA) ou pu (TCAM) ou prix (RC)
-      const puTTC = r.prix_unitaire ?? r.pu ?? null;
+
+      // "Prix de vente unitaire" = prix public TTC affiché sur la carte
+      // TA : prix_unitaire | RC : prix (champ carte) | autres : vide
+      const puTTC = r.prix_unitaire ?? r.prix ?? null;
       if (puTTC !== null) out["Prix de vente unitaire"] = puTTC;
-      // HT_PU : ht_unitaire (RC) ou calculé depuis puTTC et tva_rate pour TA
-      if (r.ht_unitaire !== undefined) out["HT_PU"] = r.ht_unitaire;
-      // tva_taux : tva_rate (RC) ou "" pour les autres
-      if (r.tva_rate !== undefined) out["tva_taux"] = r.tva_rate;
-      if (r.tva_unitaire !== undefined) out["tva_unitaire"] = r.tva_unitaire;
-      if (r.tva_total !== undefined) out["tva_total"] = r.tva_total;
-      if (r.ht_total !== undefined) out["ht_total"] = r.ht_total;
-      // montant TTC payé : prix_total (TA) ou montant (TCAM/Dons/RC/Achats)
-      let montantTTC = r.prix_total ?? r.montant ?? null;
-      if (montantTTC !== null) {
-        // Achats : négatif (charges)
-        if (section === "achats") montantTTC = -Math.abs(parseFloat(montantTTC) || 0);
-        out["montant TTC payé"] = montantTTC;
-      }
+
+      // Colonnes TVA (uniquement RC)
+      if (r.ht_unitaire  !== undefined) out["HT_PU"]        = r.ht_unitaire;
+      if (r.tva_rate     !== undefined) out["tva_taux"]      = r.tva_rate;
+      if (r.tva_unitaire !== undefined) out["tva_unitaire"]  = r.tva_unitaire;
+      if (r.tva_total    !== undefined) out["tva_total"]     = r.tva_total;
+      if (r.ht_total     !== undefined) out["ht_total"]      = r.ht_total;
+
+      // "montant TTC payé" = pu_TTC * qte pour TA/RC, montant brut pour TCAM/Dons, -montant pour Achats
+      let montantTTC = null;
+      if (section === "caisseta")        montantTTC = r.prix_total ?? null;
+      else if (section === "restocollective") montantTTC = r.prix_total ?? r.montant ?? null;
+      else if (section === "achats")     montantTTC = r.montant != null ? -Math.abs(parseFloat(r.montant)||0) : null;
+      else                               montantTTC = r.montant ?? null; // TCAM, Dons, Privatisation
+      if (montantTTC !== null) out["montant TTC payé"] = montantTTC;
+
       return out;
     };
 
@@ -587,7 +590,7 @@ ${csv.slice(0,8000)}${csv.length>8000?"…(tronqué)":""}`
                   <button onClick={()=>setShow(v=>!v)} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 text-xs">{show?"🙈":"👁️"}</button></div></div>
               {err&&<p className="text-xs text-rose-600 bg-rose-50 px-3 py-2 rounded-lg">{err}</p>}
               <button onClick={submit} style={{backgroundColor:ADMIN_COLOR}} className="w-full hover:opacity-90 text-white font-semibold py-3 rounded-xl transition-opacity shadow-sm">Se connecter</button>
-              <p className="text-center text-xs text-gray-400 mt-3">v3.2 · Build du 28/04/2026 12:37</p>
+              <p className="text-center text-xs text-gray-400 mt-3">v3.2 · Build du 28/04/2026 13:22</p>
             </div>
           </div>
         </div>
@@ -1215,15 +1218,24 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
       const [subTab,setSubTab]=useState(initialSubTab);
       useEffect(()=>{ if(initialSubTab!==subTab) setSubTab(initialSubTab); },[initialSubTab]);
 
-      const loading = allCafesLoading;
       const forceRefresh = onForceRefresh;
 
+      // Fonctions utilitaires — définies EN PREMIER
+      const n = v => (typeof v==="number" && isFinite(v)) ? v : 0;
+      const safeArr = a => Array.isArray(a) ? a : [];
       const fil=useCallback((arr)=>{ if(ft==="week")return arr.filter(r=>r.semaine===sw); if(ft==="month")return arr.filter(r=>r.mois===sm); return arr; },[ft,sw,sm]);
       const sum=(arr,k="prix_total")=>arr.reduce((s,r)=>s+(parseFloat(r[k])||0),0);
 
-      const safeArr = a => Array.isArray(a) ? a : [];
-      const stats=cafes.map(cafe=>{ const d=allCafesData[cafe]||{}; const fTA=fil(safeArr(d.caisseta)),fTC=fil(safeArr(d.tcam)),fD=fil(safeArr(d.dons)),fA=fil(safeArr(d.achats)),fP=fil(safeArr(d.privatisation)),fADH=fil(safeArr(d.adhesion)),fRC=fil(safeArr(d.restocollective)); const ta=sum(fTA),tc=sum(fTC,"montant"),dn=sum(fD,"montant"),ac=sum(fA,"montant"),pv=sum(fP,"montant_facture"),adh=sum(fADH,"total"),rc=sum(fRC,"prix_total"); return{cafe,ta:n(ta),tc:n(tc),dn:n(dn),ac:n(ac),pv:n(pv),adh:n(adh),rc:n(rc),total:n(ta+tc+dn+pv+adh+rc),fTA,fTC,fD,fADH}; });
-      const n = v => (typeof v==='number' && isFinite(v)) ? v : 0;
+      // Guard : afficher spinner si données pas encore chargées — AVANT tout calcul
+      if (Object.keys(allCafesData).length === 0) {
+        return <div className="p-12 text-center">
+          <div className="text-4xl mb-4">⏳</div>
+          <p className="text-gray-500 font-medium">Chargement des données…</p>
+          <p className="text-sm text-gray-400 mt-2">Cliquez sur 🔄 si le chargement ne démarre pas.</p>
+        </div>;
+      }
+
+      const stats=cafes.map(cafe=>{ const d=allCafesData[cafe]||{}; const fTA=fil(safeArr(d.caisseta)),fTC=fil(safeArr(d.tcam)),fD=fil(safeArr(d.dons)),fA=fil(safeArr(d.achats)),fP=fil(safeArr(d.privatisation)),fADH=fil(safeArr(d.adhesion)),fRC=fil(safeArr(d.restocollective)); const ta=n(sum(fTA)),tc=n(sum(fTC,"montant")),dn=n(sum(fD,"montant")),ac=n(sum(fA,"montant")),pv=n(sum(fP,"montant_facture")),adh=n(sum(fADH,"total")),rc=n(sum(fRC,"prix_total")); return{cafe,ta,tc,dn,ac,pv,adh,rc,total:n(ta+tc+dn+pv+adh+rc),fTA,fTC,fD,fADH}; });
       const GT=stats.reduce((s,c)=>({ta:s.ta+n(c.ta),tc:s.tc+n(c.tc),dn:s.dn+n(c.dn),ac:s.ac+n(c.ac),pv:s.pv+n(c.pv),adh:s.adh+n(c.adh),rc:s.rc+n(c.rc),total:s.total+n(c.total)}),{ta:0,tc:0,dn:0,ac:0,pv:0,adh:0,rc:0,total:0});
 
       const weekly=WEEKS_2026.slice(0,20).map(w=>{ let ta=0,tc=0,dn=0,ac=0,adh=0; cafes.forEach(c=>{ const d=allCafesData[c]||{}; ta+=sum((d.caisseta||[]).filter(r=>r.semaine===w.label)); tc+=sum((d.tcam||[]).filter(r=>r.semaine===w.label),"montant"); dn+=sum((d.dons||[]).filter(r=>r.semaine===w.label),"montant"); ac+=sum((d.achats||[]).filter(r=>r.semaine===w.label),"montant"); adh+=sum((d.adhesion||[]).filter(r=>r.semaine===w.label),"total"); }); return{week:w.label,ta,tc,dn,ac,adh,total:ta+tc+dn+adh}; }).filter(r=>r.ta+r.tc+r.dn+r.ac+r.adh>0);
@@ -1233,14 +1245,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
 
 
       // Afficher spinner uniquement si chargement EN COURS et aucune donnée encore
-      // Afficher spinner si pas encore de données (peu importe allCafesLoading)
-      if (Object.keys(allCafesData).length === 0 && cafes.length > 0) {
-        return <div className="p-12 text-center">
-          <div className="text-4xl mb-4">⏳</div>
-          <p className="text-gray-500 font-medium">Chargement des données de tous les cafés…</p>
-          <p className="text-sm text-gray-400 mt-2">Cliquez sur 🔄 si le chargement ne démarre pas.</p>
-        </div>;
-      }
+
 
       return (
         <div className="space-y-6">
