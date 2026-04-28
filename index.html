@@ -590,7 +590,7 @@ ${csv.slice(0,8000)}${csv.length>8000?"…(tronqué)":""}`
                   <button onClick={()=>setShow(v=>!v)} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 text-xs">{show?"🙈":"👁️"}</button></div></div>
               {err&&<p className="text-xs text-rose-600 bg-rose-50 px-3 py-2 rounded-lg">{err}</p>}
               <button onClick={submit} style={{backgroundColor:ADMIN_COLOR}} className="w-full hover:opacity-90 text-white font-semibold py-3 rounded-xl transition-opacity shadow-sm">Se connecter</button>
-              <p className="text-center text-xs text-gray-400 mt-3">v3.2 · Build du 28/04/2026 14:10</p>
+              <p className="text-center text-xs text-gray-400 mt-3">v3.2 · Build du 28/04/2026 14:18</p>
             </div>
           </div>
         </div>
@@ -1213,6 +1213,25 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
     };
 
     /* ── DASHBOARD GLOBAL ── */
+
+    /* ── ERROR BOUNDARY ── */
+    class ErrorBoundary extends React.Component {
+      constructor(props) { super(props); this.state = { error: null }; }
+      static getDerivedStateFromError(err) { return { error: err }; }
+      componentDidCatch(err, info) { console.error("DaddyPay crash:", err, info); }
+      render() {
+        if (this.state.error) {
+          return <div className="p-8 text-center">
+            <div className="text-4xl mb-4">⚠️</div>
+            <p className="text-red-600 font-semibold mb-2">Erreur d'affichage</p>
+            <p className="text-gray-500 text-sm mb-4">{this.state.error.message}</p>
+            <button onClick={()=>this.setState({error:null})} className="bg-red-600 text-white px-4 py-2 rounded-xl text-sm">Réessayer</button>
+          </div>;
+        }
+        return this.props.children;
+      }
+    }
+
     const DashboardGlobal = ({ cafes, onCafeCreated, isAdmin, supaStatus=null, initialSubTab="dashboard", onSubTabChange=()=>{}, allCafesData={}, allCafesLoading=false, onForceRefresh=()=>{} }) => {
       const [ft,setFt]=useState("week"); const [sw,setSw]=useState(getCurrentWeekLabel); const [sm,setSm]=useState(new Date().getMonth()+1);
       const [subTab,setSubTab]=useState(initialSubTab);
@@ -1309,9 +1328,9 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
                 <h4 className="text-sm font-semibold text-gray-700 mb-1">Modes de paiement</h4>
                 <p className="text-xs text-gray-400 mb-3">TA + TCAM + Dons + Adhésions — tous cafés</p>
                 {[...MODES,"Prélèvement"].map(m=>{
-                  const vTA  = stats.reduce((s,c)=>s+sum(c.fTA.filter(r=>r.mode===m)),0);
-                  const vTC  = stats.reduce((s,c)=>s+sum(c.fTC.filter(r=>r.mode===m),"montant"),0);
-                  const vD   = stats.reduce((s,c)=>s+sum(c.fD.filter(r=>r.mode===m),"montant"),0);
+                  const vTA  = stats.reduce((s,c)=>s+sum((c.fTA||[]).filter(r=>r.mode===m)),0);
+                  const vTC  = stats.reduce((s,c)=>s+sum((c.fTC||[]).filter(r=>r.mode===m),"montant"),0);
+                  const vD   = stats.reduce((s,c)=>s+sum((c.fD||[]).filter(r=>r.mode===m),"montant"),0);
                   const vADH = stats.reduce((s,c)=>s+c.fADH.reduce((a,r)=>a+(parseFloat(r[`indiv_${m}`])||0)+(parseFloat(r[`struc_${m}`])||0),0),0);
                   const v    = vTA+vTC+vD+vADH;
                   if(v===0) return null;
@@ -1320,9 +1339,9 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
                     <span className="font-semibold text-gray-800">{(v||0).toFixed(2)} €</span>
                   </div>;
                 })}
-                {[...MODES,"Prélèvement"].every(m=>{ const vTA=stats.reduce((s,c)=>s+sum(c.fTA.filter(r=>r.mode===m)),0); const vTC=stats.reduce((s,c)=>s+sum(c.fTC.filter(r=>r.mode===m),"montant"),0); const vD=stats.reduce((s,c)=>s+sum(c.fD.filter(r=>r.mode===m),"montant"),0); const vADH=stats.reduce((s,c)=>s+c.fADH.reduce((a,r)=>a+(parseFloat(r[`indiv_${m}`])||0)+(parseFloat(r[`struc_${m}`])||0),0),0); return vTA+vTC+vD+vADH===0; })&&<p className="text-sm text-gray-400 text-center py-4">Aucune donnée</p>}
+                {[...MODES,"Prélèvement"].every(m=>{ const vTA=stats.reduce((s,c)=>s+sum((c.fTA||[]).filter(r=>r.mode===m)),0); const vTC=stats.reduce((s,c)=>s+sum((c.fTC||[]).filter(r=>r.mode===m),"montant"),0); const vD=stats.reduce((s,c)=>s+sum((c.fD||[]).filter(r=>r.mode===m),"montant"),0); const vADH=stats.reduce((s,c)=>s+c.fADH.reduce((a,r)=>a+(parseFloat(r[`indiv_${m}`])||0)+(parseFloat(r[`struc_${m}`])||0),0),0); return vTA+vTC+vD+vADH===0; })&&<p className="text-sm text-gray-400 text-center py-4">Aucune donnée</p>}
               </div>
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><h4 className="text-sm font-semibold text-gray-700 mb-3">TA global — Répartition par type</h4>{["Soft","Alcool","Snacking"].map(t=>{const v=stats.reduce((s,c)=>s+sum(c.fTA.filter(r=>r.typo===t)),0);if(v===0)return null;return<div key={t} className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0"><span className="text-sm text-gray-600">{t}</span><span className="font-semibold text-emerald-600">{(v||0).toFixed(2)} €</span></div>;})} {["Soft","Alcool","Snacking"].every(t=>stats.reduce((s,c)=>s+sum(c.fTA.filter(r=>r.typo===t)),0)===0)&&<p className="text-sm text-gray-400 text-center py-4">Aucune donnée</p>}</div>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><h4 className="text-sm font-semibold text-gray-700 mb-3">TA global — Répartition par type</h4>{["Soft","Alcool","Snacking"].map(t=>{const v=stats.reduce((s,c)=>s+sum((c.fTA||[]).filter(r=>r.typo===t)),0);if(v===0)return null;return<div key={t} className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0"><span className="text-sm text-gray-600">{t}</span><span className="font-semibold text-emerald-600">{(v||0).toFixed(2)} €</span></div>;})} {["Soft","Alcool","Snacking"].every(t=>stats.reduce((s,c)=>s+sum((c.fTA||[]).filter(r=>r.typo===t)),0)===0)&&<p className="text-sm text-gray-400 text-center py-4">Aucune donnée</p>}</div>
             </div>
             {/* Récap hebdo */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><h4 className="text-sm font-semibold text-gray-700 mb-3">Récap. hebdomadaire — tous cafés</h4>
@@ -2050,7 +2069,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
             {globalView?(
               <>
                 <div className="mb-4 flex items-center gap-2"><span className="inline-block w-3 h-3 rounded-full" style={{backgroundColor:ADMIN_COLOR}}></span><h2 className="text-sm font-semibold text-gray-600">Vue globale — Tous les cafés</h2></div>
-                <DashboardGlobal cafes={cafes} onCafeCreated={setCafes} isAdmin={isAdmin} supaStatus={supaStatus} initialSubTab={subTabAdmin} onSubTabChange={setSubTabAdmin} allCafesData={allCafesData} allCafesLoading={allCafesLoading} onForceRefresh={()=>loadAllCafes(true)}/>
+                <ErrorBoundary><DashboardGlobal cafes={cafes} onCafeCreated={setCafes} isAdmin={isAdmin} supaStatus={supaStatus} initialSubTab={subTabAdmin} onSubTabChange={setSubTabAdmin} allCafesData={allCafesData} allCafesLoading={allCafesLoading} onForceRefresh={()=>loadAllCafes(true)}/></ErrorBoundary>
               </>
             ):(
               <>
