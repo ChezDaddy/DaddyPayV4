@@ -590,7 +590,7 @@ ${csv.slice(0,8000)}${csv.length>8000?"…(tronqué)":""}`
                   <button onClick={()=>setShow(v=>!v)} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 text-xs">{show?"🙈":"👁️"}</button></div></div>
               {err&&<p className="text-xs text-rose-600 bg-rose-50 px-3 py-2 rounded-lg">{err}</p>}
               <button onClick={submit} style={{backgroundColor:ADMIN_COLOR}} className="w-full hover:opacity-90 text-white font-semibold py-3 rounded-xl transition-opacity shadow-sm">Se connecter</button>
-              <p className="text-center text-xs text-gray-400 mt-3">v3.2 · Build du 28/04/2026 14:18</p>
+              <p className="text-center text-xs text-gray-400 mt-3">v3.2 · Build du 28/04/2026 14:35</p>
             </div>
           </div>
         </div>
@@ -1254,10 +1254,16 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
         </div>;
       }
 
-      const stats=cafes.map(cafe=>{ const d=allCafesData[cafe]||{}; const fTA=fil(safeArr(d.caisseta)),fTC=fil(safeArr(d.tcam)),fD=fil(safeArr(d.dons)),fA=fil(safeArr(d.achats)),fP=fil(safeArr(d.privatisation)),fADH=fil(safeArr(d.adhesion)),fRC=fil(safeArr(d.restocollective)); const ta=n(sum(fTA)),tc=n(sum(fTC,"montant")),dn=n(sum(fD,"montant")),ac=n(sum(fA,"montant")),pv=n(sum(fP,"montant_facture")),adh=n(sum(fADH,"total")),rc=n(sum(fRC,"prix_total")); return{cafe,ta,tc,dn,ac,pv,adh,rc,total:n(ta+tc+dn+pv+adh+rc),fTA,fTC,fD,fADH}; });
-      const GT=stats.reduce((s,c)=>({ta:s.ta+n(c.ta),tc:s.tc+n(c.tc),dn:s.dn+n(c.dn),ac:s.ac+n(c.ac),pv:s.pv+n(c.pv),adh:s.adh+n(c.adh),rc:s.rc+n(c.rc),total:s.total+n(c.total)}),{ta:0,tc:0,dn:0,ac:0,pv:0,adh:0,rc:0,total:0});
+      let stats = [], GT = {ta:0,tc:0,dn:0,ac:0,pv:0,adh:0,rc:0,total:0};
+      try {
+        stats=cafes.map(cafe=>{ const d=allCafesData[cafe]||{}; const fTA=fil(safeArr(d.caisseta)),fTC=fil(safeArr(d.tcam)),fD=fil(safeArr(d.dons)),fA=fil(safeArr(d.achats)),fP=fil(safeArr(d.privatisation)),fADH=fil(safeArr(d.adhesion)),fRC=fil(safeArr(d.restocollective)); const ta=n(sum(fTA)),tc=n(sum(fTC,"montant")),dn=n(sum(fD,"montant")),ac=n(sum(fA,"montant")),pv=n(sum(fP,"montant_facture")),adh=n(sum(fADH,"total")),rc=n(sum(fRC,"prix_total")); return{cafe,ta,tc,dn,ac,pv,adh,rc,total:n(ta+tc+dn+pv+adh+rc),fTA,fTC,fD,fADH}; });
+        GT=stats.reduce((s,c)=>({ta:s.ta+n(c.ta),tc:s.tc+n(c.tc),dn:s.dn+n(c.dn),ac:s.ac+n(c.ac),pv:s.pv+n(c.pv),adh:s.adh+n(c.adh),rc:s.rc+n(c.rc),total:s.total+n(c.total)}),{ta:0,tc:0,dn:0,ac:0,pv:0,adh:0,rc:0,total:0});
+      } catch(statsErr) { console.error("STATS CRASH:", statsErr.message, statsErr.stack); }
 
-      const weekly=WEEKS_2026.slice(0,20).map(w=>{ let ta=0,tc=0,dn=0,ac=0,adh=0; cafes.forEach(c=>{ const d=allCafesData[c]||{}; ta+=sum((d.caisseta||[]).filter(r=>r.semaine===w.label)); tc+=sum((d.tcam||[]).filter(r=>r.semaine===w.label),"montant"); dn+=sum((d.dons||[]).filter(r=>r.semaine===w.label),"montant"); ac+=sum((d.achats||[]).filter(r=>r.semaine===w.label),"montant"); adh+=sum((d.adhesion||[]).filter(r=>r.semaine===w.label),"total"); }); return{week:w.label,ta,tc,dn,ac,adh,total:ta+tc+dn+adh}; }).filter(r=>r.ta+r.tc+r.dn+r.ac+r.adh>0);
+      let weekly = [];
+      try {
+        weekly=WEEKS_2026.slice(0,20).map(w=>{ let ta=0,tc=0,dn=0,ac=0,adh=0; cafes.forEach(c=>{ const d=allCafesData[c]||{}; ta+=sum((d.caisseta||[]).filter(r=>r.semaine===w.label)); tc+=sum((d.tcam||[]).filter(r=>r.semaine===w.label),"montant"); dn+=sum((d.dons||[]).filter(r=>r.semaine===w.label),"montant"); ac+=sum((d.achats||[]).filter(r=>r.semaine===w.label),"montant"); adh+=sum((d.adhesion||[]).filter(r=>r.semaine===w.label),"total"); }); return{week:w.label,ta,tc,dn,ac,adh,total:ta+tc+dn+adh}; }).filter(r=>r.ta+r.tc+r.dn+r.ac+r.adh>0);
+      } catch(wErr) { console.error("WEEKLY CRASH:", wErr.message); }
 
       const handleExport=()=>{ const p=ft==="week"?sw:ft==="month"?`M${sm}`:"all"; const rows=[]; cafes.forEach(c=>{ const d=allCafesData[c]||{}; const fn=r=>{ if(!r.date)return false; if(ft==="week")return r.semaine===sw; if(ft==="month")return r.mois===sm; return true; }; ["caisseta","tcam","dons","achats","privatisation"].forEach(s=>(d[s]||[]).filter(fn).forEach(r=>rows.push({Café:c,Section:s.toUpperCase(),TVA:"",...r}))); explodeAdhesion((d.adhesion||[]).filter(fn),c).forEach(r=>rows.push({...r,TVA:""})); (d.restocollective||[]).filter(fn).forEach(r=>rows.push({Café:c,Section:"RESTOCOLLECTIVE",TVA:r.tva_total?.toFixed(2)||"",...r})); }); buildAndDownloadCSV(rows,`DaddyCafe_GLOBAL_${p}_${new Date().toISOString().slice(0,10)}.csv`); };
 
@@ -2094,6 +2100,21 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
       );
     }
 
+    // Capturer toutes les erreurs JS non catchées
+    window.onerror = function(msg, src, line, col, err) {
+      document.body.innerHTML = '<div style="padding:40px;font-family:monospace;background:#fff;">' +
+        '<h2 style="color:#B7242B">❌ Erreur JavaScript DaddyPay</h2>' +
+        '<p style="color:#333;margin:10px 0"><b>Message:</b> ' + msg + '</p>' +
+        '<p style="color:#666;margin:5px 0"><b>Ligne:</b> ' + line + ', Col: ' + col + '</p>' +
+        '<p style="color:#666;margin:5px 0"><b>Fichier:</b> ' + src + '</p>' +
+        (err ? '<p style="color:#666;margin:5px 0"><b>Stack:</b><br><pre>' + err.stack + '</pre></p>' : '') +
+        '<button onclick="location.reload()" style="margin-top:20px;padding:10px 20px;background:#B7242B;color:white;border:none;border-radius:8px;cursor:pointer">Recharger</button>' +
+        '</div>';
+      return true;
+    };
+    window.onunhandledrejection = function(e) {
+      window.onerror(e.reason?.message || String(e.reason), '', 0, 0, e.reason);
+    };
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
   </script>
