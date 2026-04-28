@@ -1233,11 +1233,12 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
 
 
       // Afficher spinner uniquement si chargement EN COURS et aucune donnée encore
-      if ((allCafesLoading || Object.keys(allCafesData).length === 0) && cafes.length > 0) {
+      // Afficher spinner si pas encore de données (peu importe allCafesLoading)
+      if (Object.keys(allCafesData).length === 0 && cafes.length > 0) {
         return <div className="p-12 text-center">
           <div className="text-4xl mb-4">⏳</div>
           <p className="text-gray-500 font-medium">Chargement des données de tous les cafés…</p>
-          <p className="text-sm text-gray-400 mt-2">Cliquez sur 🔄 si le chargement prend trop longtemps</p>
+          <p className="text-sm text-gray-400 mt-2">Cliquez sur 🔄 si le chargement ne démarre pas.</p>
         </div>;
       }
 
@@ -1948,10 +1949,10 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
             setSelCafe(cafes[0]||null);
             setSubTabAdmin("dashboard");
             setGlobalView(true);
-            // Forcer le chargement après le rendu
-            setTimeout(() => {
-              if (cafes.length > 0 && !_loadingRef.current) loadAllCafes();
-            }, 200);
+            // Déclencher le chargement immédiatement (sans attendre le prochain tick)
+            requestAnimationFrame(() => {
+              if (!_loadingRef.current) loadAllCafes();
+            });
           } else {
             setSelCafe(s.cafe);
             setGlobalView(false);
