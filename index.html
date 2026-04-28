@@ -590,7 +590,7 @@ ${csv.slice(0,8000)}${csv.length>8000?"…(tronqué)":""}`
                   <button onClick={()=>setShow(v=>!v)} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 text-xs">{show?"🙈":"👁️"}</button></div></div>
               {err&&<p className="text-xs text-rose-600 bg-rose-50 px-3 py-2 rounded-lg">{err}</p>}
               <button onClick={submit} style={{backgroundColor:ADMIN_COLOR}} className="w-full hover:opacity-90 text-white font-semibold py-3 rounded-xl transition-opacity shadow-sm">Se connecter</button>
-              <p className="text-center text-xs text-gray-400 mt-3">v3.2 · Build du 28/04/2026 13:22</p>
+              <p className="text-center text-xs text-gray-400 mt-3">v3.2 · Build du 28/04/2026 14:10</p>
             </div>
           </div>
         </div>
@@ -1224,7 +1224,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
       const n = v => (typeof v==="number" && isFinite(v)) ? v : 0;
       const safeArr = a => Array.isArray(a) ? a : [];
       const fil=useCallback((arr)=>{ if(ft==="week")return arr.filter(r=>r.semaine===sw); if(ft==="month")return arr.filter(r=>r.mois===sm); return arr; },[ft,sw,sm]);
-      const sum=(arr,k="prix_total")=>arr.reduce((s,r)=>s+(parseFloat(r[k])||0),0);
+      const sum=(arr,k="prix_total")=>{ const r=safeArr(arr).reduce((s,r)=>s+(parseFloat(r[k])||0),0); return isFinite(r)?r:0; };
 
       // Guard : afficher spinner si données pas encore chargées — AVANT tout calcul
       if (Object.keys(allCafesData).length === 0) {
@@ -1268,14 +1268,14 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
             </div>
             {/* KPIs */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <StatCard label="Total TA — tous cafés" value={`${GT.ta.toFixed(2)} €`} color="emerald"/>
-              <StatCard label="Total TCAM — tous cafés" value={`${GT.tc.toFixed(2)} €`} color="amber"/>
-              <StatCard label="Total Dons — tous cafés" value={`${GT.dn.toFixed(2)} €`} color="rose"/>
-              <StatCard label="Total Achats — tous cafés" value={`${GT.ac.toFixed(2)} €`} color="sky"/>
-              <StatCard label="Privatisations" value={`${GT.pv.toFixed(2)} €`} color="violet"/>
-              <StatCard label="Adhésions — tous cafés" value={`${GT.adh.toFixed(2)} €`} color="violet"/>
-              {GT.rc>0&&<StatCard label="Resto Collective — tous cafés" value={`${GT.rc.toFixed(2)} €`} color="amber" sub="TTC (tous cafés RC)"/>}
-              <StatCard label="GRAND TOTAL encaissé" value={`${GT.total.toFixed(2)} €`} color="emerald" sub="TA + TCAM + Dons + Privat. + Adh. + RC"/>
+              <StatCard label="Total TA — tous cafés" value={`${(GT.ta||0).toFixed(2)} €`} color="emerald"/>
+              <StatCard label="Total TCAM — tous cafés" value={`${(GT.tc||0).toFixed(2)} €`} color="amber"/>
+              <StatCard label="Total Dons — tous cafés" value={`${(GT.dn||0).toFixed(2)} €`} color="rose"/>
+              <StatCard label="Total Achats — tous cafés" value={`${(GT.ac||0).toFixed(2)} €`} color="sky"/>
+              <StatCard label="Privatisations" value={`${(GT.pv||0).toFixed(2)} €`} color="violet"/>
+              <StatCard label="Adhésions — tous cafés" value={`${(GT.adh||0).toFixed(2)} €`} color="violet"/>
+              {GT.rc>0&&<StatCard label="Resto Collective — tous cafés" value={`${(GT.rc||0).toFixed(2)} €`} color="amber" sub="TTC (tous cafés RC)"/>}
+              <StatCard label="GRAND TOTAL encaissé" value={`${(GT.total||0).toFixed(2)} €`} color="emerald" sub="TA + TCAM + Dons + Privat. + Adh. + RC"/>
             </div>
             {/* Tableau par café */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -1286,19 +1286,19 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
                   {stats.map(({cafe,ta,tc,dn,ac,pv,adh,total},i)=>(
                     <tr key={cafe} className="border-t border-gray-50 hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3"><div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{backgroundColor:CAFE_COLORS_LIST[i%CAFE_COLORS_LIST.length]}}></span><span className="font-medium text-gray-800">{cafe}</span></div></td>
-                      <td className="px-4 py-3 text-emerald-600 font-medium">{ta.toFixed(2)} €</td>
-                      <td className="px-4 py-3 text-amber-600 font-medium">{tc.toFixed(2)} €</td>
-                      <td className="px-4 py-3 text-rose-600 font-medium">{dn.toFixed(2)} €</td>
-                      <td className="px-4 py-3 text-sky-600 font-medium">−{ac.toFixed(2)} €</td>
-                      <td className="px-4 py-3 text-violet-600 font-medium">{pv.toFixed(2)} €</td>
-                      <td className="px-4 py-3 text-indigo-600 font-medium">{adh.toFixed(2)} €</td>
-                      <td className="px-4 py-3 text-orange-600 font-medium">{rc>0?`${rc.toFixed(2)} €`:"—"}</td>
-                      <td className="px-4 py-3 font-bold text-gray-800">{total.toFixed(2)} €</td>
+                      <td className="px-4 py-3 text-emerald-600 font-medium">{(ta||0).toFixed(2)} €</td>
+                      <td className="px-4 py-3 text-amber-600 font-medium">{(tc||0).toFixed(2)} €</td>
+                      <td className="px-4 py-3 text-rose-600 font-medium">{(dn||0).toFixed(2)} €</td>
+                      <td className="px-4 py-3 text-sky-600 font-medium">−{(ac||0).toFixed(2)} €</td>
+                      <td className="px-4 py-3 text-violet-600 font-medium">{(pv||0).toFixed(2)} €</td>
+                      <td className="px-4 py-3 text-indigo-600 font-medium">{(adh||0).toFixed(2)} €</td>
+                      <td className="px-4 py-3 text-orange-600 font-medium">{rc>0?`${(rc||0).toFixed(2)} €`:"—"}</td>
+                      <td className="px-4 py-3 font-bold text-gray-800">{(total||0).toFixed(2)} €</td>
                     </tr>
                   ))}
                   <tr className="border-t-2 border-gray-200 bg-gray-50 font-bold text-sm">
                     <td className="px-4 py-3 text-gray-700">TOTAL</td>
-                    <td className="px-4 py-3 text-emerald-700">{GT.ta.toFixed(2)} €</td><td className="px-4 py-3 text-amber-700">{GT.tc.toFixed(2)} €</td><td className="px-4 py-3 text-rose-700">{GT.dn.toFixed(2)} €</td><td className="px-4 py-3 text-sky-700">−{GT.ac.toFixed(2)} €</td><td className="px-4 py-3 text-violet-700">{GT.pv.toFixed(2)} €</td><td className="px-4 py-3 text-indigo-700">{GT.adh.toFixed(2)} €</td><td className="px-4 py-3 text-orange-700">{GT.rc>0?`${GT.rc.toFixed(2)} €`:"—"}</td><td className="px-4 py-3 text-gray-900">{GT.total.toFixed(2)} €</td>
+                    <td className="px-4 py-3 text-emerald-700">{(GT.ta||0).toFixed(2)} €</td><td className="px-4 py-3 text-amber-700">{(GT.tc||0).toFixed(2)} €</td><td className="px-4 py-3 text-rose-700">{(GT.dn||0).toFixed(2)} €</td><td className="px-4 py-3 text-sky-700">−{(GT.ac||0).toFixed(2)} €</td><td className="px-4 py-3 text-violet-700">{(GT.pv||0).toFixed(2)} €</td><td className="px-4 py-3 text-indigo-700">{(GT.adh||0).toFixed(2)} €</td><td className="px-4 py-3 text-orange-700">{GT.rc>0?`${(GT.rc||0).toFixed(2)} €`:"—"}</td><td className="px-4 py-3 text-gray-900">{(GT.total||0).toFixed(2)} €</td>
                   </tr>
                 </tbody>
               </table></div>
@@ -1317,12 +1317,12 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
                   if(v===0) return null;
                   return <div key={m} className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0">
                     <span className="text-sm text-gray-600">{m}</span>
-                    <span className="font-semibold text-gray-800">{v.toFixed(2)} €</span>
+                    <span className="font-semibold text-gray-800">{(v||0).toFixed(2)} €</span>
                   </div>;
                 })}
                 {[...MODES,"Prélèvement"].every(m=>{ const vTA=stats.reduce((s,c)=>s+sum(c.fTA.filter(r=>r.mode===m)),0); const vTC=stats.reduce((s,c)=>s+sum(c.fTC.filter(r=>r.mode===m),"montant"),0); const vD=stats.reduce((s,c)=>s+sum(c.fD.filter(r=>r.mode===m),"montant"),0); const vADH=stats.reduce((s,c)=>s+c.fADH.reduce((a,r)=>a+(parseFloat(r[`indiv_${m}`])||0)+(parseFloat(r[`struc_${m}`])||0),0),0); return vTA+vTC+vD+vADH===0; })&&<p className="text-sm text-gray-400 text-center py-4">Aucune donnée</p>}
               </div>
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><h4 className="text-sm font-semibold text-gray-700 mb-3">TA global — Répartition par type</h4>{["Soft","Alcool","Snacking"].map(t=>{const v=stats.reduce((s,c)=>s+sum(c.fTA.filter(r=>r.typo===t)),0);if(v===0)return null;return<div key={t} className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0"><span className="text-sm text-gray-600">{t}</span><span className="font-semibold text-emerald-600">{v.toFixed(2)} €</span></div>;})} {["Soft","Alcool","Snacking"].every(t=>stats.reduce((s,c)=>s+sum(c.fTA.filter(r=>r.typo===t)),0)===0)&&<p className="text-sm text-gray-400 text-center py-4">Aucune donnée</p>}</div>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><h4 className="text-sm font-semibold text-gray-700 mb-3">TA global — Répartition par type</h4>{["Soft","Alcool","Snacking"].map(t=>{const v=stats.reduce((s,c)=>s+sum(c.fTA.filter(r=>r.typo===t)),0);if(v===0)return null;return<div key={t} className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0"><span className="text-sm text-gray-600">{t}</span><span className="font-semibold text-emerald-600">{(v||0).toFixed(2)} €</span></div>;})} {["Soft","Alcool","Snacking"].every(t=>stats.reduce((s,c)=>s+sum(c.fTA.filter(r=>r.typo===t)),0)===0)&&<p className="text-sm text-gray-400 text-center py-4">Aucune donnée</p>}</div>
             </div>
             {/* Récap hebdo */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><h4 className="text-sm font-semibold text-gray-700 mb-3">Récap. hebdomadaire — tous cafés</h4>
@@ -1341,7 +1341,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
                   </tr></thead>
                   <tbody>
                     {(()=>{
-                      const sumM=(arr,key)=>MONTHS.map((_,i)=>arr.filter(r=>r.mois===i+1).reduce((s,r)=>s+(parseFloat(r[key])||0),0));
+                      const sumM=(arr,key)=>MONTHS.map((_,i)=>{ const v=safeArr(arr).filter(r=>r.mois===i+1).reduce((s,r)=>s+(parseFloat(r[key])||0),0); return isFinite(v)?v:0; });
                       const addM=(a,b)=>a.map((v,i)=>v+b[i]);
                       let recM=MONTHS.map(()=>0), acM=MONTHS.map(()=>0);
                       cafes.forEach(c=>{
@@ -1351,7 +1351,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
                       });
                       const margeM=recM.map((v,i)=>v-acM[i]);
                       const totRec=recM.reduce((a,b)=>a+b,0), totAc=acM.reduce((a,b)=>a+b,0), totMarge=totRec-totAc;
-                      const fmt=v=>v===0?"—":`${v.toFixed(0)}€`;
+                      const fmt=v=>v===0?"—":`${(v||0).toFixed(0)}€`;
                       const fmtPct=(m,r)=>r===0?"—":`${((m/r)*100).toFixed(0)}%`;
                       return <>
                         <tr className="border-t border-gray-50 hover:bg-gray-50">
@@ -1480,7 +1480,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
                     <td className="px-3 py-2 font-bold text-gray-800">TOTAL</td>
                     {MODES_ADH.map(m=>{
                       const v=(parseFloat(form[`indiv_${m}`])||0)+(parseFloat(form[`struc_${m}`])||0);
-                      return <td key={m} className="px-2 py-2 text-center font-semibold text-gray-700">{v>0?`${v.toFixed(2)}€`:"—"}</td>;
+                      return <td key={m} className="px-2 py-2 text-center font-semibold text-gray-700">{v>0?`${(v||0).toFixed(2)}€`:"—"}</td>;
                     })}
                     <td className="px-3 py-2 text-right font-bold text-indigo-800">{(totalIndiv+totalStruc).toFixed(2)} €</td>
                   </tr>
@@ -1581,7 +1581,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
             <div className="mb-4">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">🪙 Pièces (0.10€ → 2€)</p>
-                <span className="text-sm font-bold text-amber-700 bg-amber-50 px-3 py-1 rounded-lg">Sous-total : {totalPieces.toFixed(2)} €</span>
+                <span className="text-sm font-bold text-amber-700 bg-amber-50 px-3 py-1 rounded-lg">Sous-total : {(totalPieces||0).toFixed(2)} €</span>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                 {PIECES.filter(p=>p.type==="piece").map(p=>(
@@ -1599,7 +1599,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
             <div className="mb-3">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">💵 Billets (5€ → 200€)</p>
-                <span className="text-sm font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-lg">Sous-total : {totalBillets.toFixed(2)} €</span>
+                <span className="text-sm font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-lg">Sous-total : {(totalBillets||0).toFixed(2)} €</span>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                 {PIECES.filter(p=>p.type==="billet").map(p=>(
@@ -1621,7 +1621,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
             <div className="grid grid-cols-3 gap-4">
               <div className="text-center p-4 bg-amber-50 rounded-2xl">
                 <p className="text-xs text-gray-500 mb-1 uppercase tracking-wide">Total en caisse</p>
-                <p className="text-2xl font-bold text-amber-700">{totalMonnaie.toFixed(2)} €</p>
+                <p className="text-2xl font-bold text-amber-700">{(totalMonnaie||0).toFixed(2)} €</p>
               </div>
               <div className="text-center p-4 bg-emerald-50 rounded-2xl">
                 <p className="text-xs text-gray-500 mb-1 uppercase tracking-wide">Encaissé Espèces</p>
@@ -1629,7 +1629,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
               </div>
               <div className={`text-center p-4 rounded-2xl ${Math.abs(ecart)<0.01?"bg-gray-50":ecart>0?"bg-emerald-50":"bg-rose-50"}`}>
                 <p className="text-xs text-gray-500 mb-1 uppercase tracking-wide">Écart</p>
-                <p className={`text-2xl font-bold ${Math.abs(ecart)<0.01?"text-gray-600":ecart>0?"text-emerald-700":"text-rose-700"}`}>{ecart>=0?"+":""}{ecart.toFixed(2)} €</p>
+                <p className={`text-2xl font-bold ${Math.abs(ecart)<0.01?"text-gray-600":ecart>0?"text-emerald-700":"text-rose-700"}`}>{ecart>=0?"+":""}{(ecart||0).toFixed(2)} €</p>
               </div>
             </div>
           </div>
@@ -1758,9 +1758,9 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
                   </div>
                 ))}
                 <div className="px-4 py-2 bg-orange-50 border-t border-orange-100 text-xs text-gray-600 flex gap-4">
-                  <span>HT : <strong>{totalHT.toFixed(2)} €</strong></span>
-                  <span>TVA : <strong>{totalTVA.toFixed(2)} €</strong></span>
-                  <span className="font-bold text-orange-700">TTC : {totalTTC.toFixed(2)} €</span>
+                  <span>HT : <strong>{(totalHT||0).toFixed(2)} €</strong></span>
+                  <span>TVA : <strong>{(totalTVA||0).toFixed(2)} €</strong></span>
+                  <span className="font-bold text-orange-700">TTC : {(totalTTC||0).toFixed(2)} €</span>
                 </div>
               </div>
             )}
@@ -1769,8 +1769,8 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
               <div>{panier.length>0
                 ? <div className="bg-orange-500 text-white rounded-xl px-5 py-3 shadow-sm text-center">
                     <p className="text-xs opacity-80 uppercase tracking-wide">À encaisser TTC</p>
-                    <p className="text-3xl font-bold">{totalTTC.toFixed(2)} €</p>
-                    <p className="text-xs opacity-70">dont TVA {totalTVA.toFixed(2)} €</p>
+                    <p className="text-3xl font-bold">{(totalTTC||0).toFixed(2)} €</p>
+                    <p className="text-xs opacity-70">dont TVA {(totalTVA||0).toFixed(2)} €</p>
                   </div>
                 : <span className="text-sm text-gray-400">Ajoutez des produits ci-dessus</span>
               }</div>
