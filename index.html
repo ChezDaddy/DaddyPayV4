@@ -236,7 +236,8 @@
 
     /* ── BUILD SUMMARY TEXT for email ── */
     const buildSummaryText = (rows, cafes, periodLabel) => {
-      const sum = (arr, k) => arr.reduce((s,r)=>s+(parseFloat(r[k])||0),0);
+      // Les lignes passent par normalizeRow → colonne unifiée "montant TTC payé"
+      const sum = (arr) => arr.reduce((s,r)=>s+(parseFloat(r["montant TTC payé"])||0),0);
       let txt = `☕ Chez Daddy — Rapport ${periodLabel}\n`;
       txt += `Généré le ${new Date().toLocaleDateString("fr-FR")} à ${new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}\n`;
       txt += `Total lignes : ${rows.length}\n\n`;
@@ -244,32 +245,40 @@
       cafes.forEach(cafe => {
         const cr = rows.filter(r=>r.Café===cafe);
         if (!cr.length) return;
-        const ta   = sum(cr.filter(r=>r.Section==="CAISSETA"), "prix_total");
-        const tc   = sum(cr.filter(r=>r.Section==="TCAM"),     "montant");
-        const dn   = sum(cr.filter(r=>r.Section==="DONS"),     "montant");
-        const ac   = sum(cr.filter(r=>r.Section==="ACHATS"),   "montant");
-        const pv   = sum(cr.filter(r=>r.Section==="PRIVATISATION"), "montant_facture");
-        const tot  = ta+tc+dn+pv;
+        const ta   = sum(cr.filter(r=>r.Section==="CAISSETA"));
+        const tc   = sum(cr.filter(r=>r.Section==="TCAM"));
+        const dn   = sum(cr.filter(r=>r.Section==="DONS"));
+        const ac   = Math.abs(sum(cr.filter(r=>r.Section==="ACHATS")));
+        const pv   = sum(cr.filter(r=>r.Section==="PRIVATISATION"));
+        const rc   = sum(cr.filter(r=>r.Section==="RESTOCOLLECTIVE"));
+        const adh  = sum(cr.filter(r=>r.Section==="ADHESION"));
+        const tot  = ta+tc+dn+pv+rc+adh;
         txt += `\n${cafe}\n`;
         txt += `  TA         : ${ta.toFixed(2)} €\n`;
         txt += `  TCAM       : ${tc.toFixed(2)} €\n`;
         txt += `  Dons       : ${dn.toFixed(2)} €\n`;
         txt += `  Achats     : -${ac.toFixed(2)} €\n`;
         txt += `  Privat.    : ${pv.toFixed(2)} €\n`;
+        if (rc>0)  txt += `  RC         : ${rc.toFixed(2)} €\n`;
+        if (adh>0) txt += `  Adhésions  : ${adh.toFixed(2)} €\n`;
         txt += `  ► TOTAL    : ${tot.toFixed(2)} €\n`;
       });
-      const gTA  = sum(rows.filter(r=>r.Section==="CAISSETA"), "prix_total");
-      const gTC  = sum(rows.filter(r=>r.Section==="TCAM"),     "montant");
-      const gDN  = sum(rows.filter(r=>r.Section==="DONS"),     "montant");
-      const gAC  = sum(rows.filter(r=>r.Section==="ACHATS"),   "montant");
-      const gPV  = sum(rows.filter(r=>r.Section==="PRIVATISATION"), "montant_facture");
+      const gTA  = sum(rows.filter(r=>r.Section==="CAISSETA"));
+      const gTC  = sum(rows.filter(r=>r.Section==="TCAM"));
+      const gDN  = sum(rows.filter(r=>r.Section==="DONS"));
+      const gAC  = Math.abs(sum(rows.filter(r=>r.Section==="ACHATS")));
+      const gPV  = sum(rows.filter(r=>r.Section==="PRIVATISATION"));
+      const gRC  = sum(rows.filter(r=>r.Section==="RESTOCOLLECTIVE"));
+      const gADH = sum(rows.filter(r=>r.Section==="ADHESION"));
       txt += `\n${"─".repeat(40)}\nTOTAL TOUS CAFÉS\n${"─".repeat(40)}\n`;
       txt += `  TA         : ${gTA.toFixed(2)} €\n`;
       txt += `  TCAM       : ${gTC.toFixed(2)} €\n`;
       txt += `  Dons       : ${gDN.toFixed(2)} €\n`;
       txt += `  Achats     : -${gAC.toFixed(2)} €\n`;
       txt += `  Privat.    : ${gPV.toFixed(2)} €\n`;
-      txt += `  ► ENCAISSÉ : ${(gTA+gTC+gDN+gPV).toFixed(2)} €\n`;
+      if (gRC>0)  txt += `  RC         : ${gRC.toFixed(2)} €\n`;
+      if (gADH>0) txt += `  Adhésions  : ${gADH.toFixed(2)} €\n`;
+      txt += `  ► ENCAISSÉ : ${(gTA+gTC+gDN+gPV+gRC+gADH).toFixed(2)} €\n`;
       txt += `\nLe fichier CSV complet a été téléchargé automatiquement sur le poste de l'administrateur.`;
       return txt;
     };
@@ -590,7 +599,7 @@ ${csv.slice(0,8000)}${csv.length>8000?"…(tronqué)":""}`
                   <button onClick={()=>setShow(v=>!v)} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 text-xs">{show?"🙈":"👁️"}</button></div></div>
               {err&&<p className="text-xs text-rose-600 bg-rose-50 px-3 py-2 rounded-lg">{err}</p>}
               <button onClick={submit} style={{backgroundColor:ADMIN_COLOR}} className="w-full hover:opacity-90 text-white font-semibold py-3 rounded-xl transition-opacity shadow-sm">Se connecter</button>
-              <p className="text-center text-xs text-gray-400 mt-3">v3.2 · Build du 28/04/2026 15:09</p>
+              <p className="text-center text-xs text-gray-400 mt-3">v3.2 · Build du 28/04/2026 15:51</p>
             </div>
           </div>
         </div>
@@ -1898,7 +1907,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
         const onDone  = () => { setSaving(false); };
         const onError = (e) => {
           setSaving(false);
-          setSaveError("⚠️ Sauvegarde en attente (retry auto)…");
+          setSaveError("💾 Sauvegarde en cours…");
           setTimeout(()=>setSaveError(null), 5000);
         };
         window.addEventListener("daddy_save_start", onStart);
