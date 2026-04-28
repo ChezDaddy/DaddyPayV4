@@ -127,6 +127,9 @@
       return loadRCEnabled();
     };
     const TVA_RATES = { Snacking: 0.10, Soft: 0.20, Alcool: 0.20 };
+    // Taux RC simplifiés : clé = taux en %, valeur = taux décimal
+    const RC_TVA_RATES = { "0": 0, "5.5": 0.055, "10": 0.10, "20": 0.20 };
+    const getRCTaux = (rcType) => RC_TVA_RATES[rcType] ?? RC_TVA_RATES["10"];
 
     /* ── EMAILJS CONFIG ── (à renseigner dans le panneau Admin) */
     const EMAILJS_KEY   = "daddy_emailjs";
@@ -156,15 +159,11 @@
 
     /* ── BUILD CSV STRING (sans téléchargement) ── */
     const CSV_COL_ORDER = [
-      "TVA","Café","Section",
+      "Café","Section",
       "date","semaine","mois",
-      "produit","evenement","fournisseur","client",
-      "typo","type","destination",
-      "qte","pu",
-      "montant","montant_facture","montant_devis",
-      "tva_rate","tva_unitaire","tva_total","ht_unitaire","ht_total",
-      "mode","recu_fiscal","facture_teams","devis_accepte",
-      "no_facture","date_evenement","date_reglement","commentaire","id"
+      "produit","evenement","fournisseur","typo","destination",
+      "qte","Prix de vente unitaire","HT_PU","tva_taux","tva_unitaire","tva_total","ht_total","montant TTC payé",
+      "mode","facture_teams","no_facture","commentaire","id"
     ];
     const sortedHeaders = (rows) => {
       const allKeys = [...new Set(rows.flatMap(r=>Object.keys(r)))];
@@ -180,25 +179,30 @@
     };
 
     /* ── COLLECT ALL DATA ── */
-    // Normalise une ligne pour le CSV : unifie les colonnes de montant/qte/pu
+    // Normalise une ligne pour le CSV selon les colonnes cibles
     const normalizeRow = (r, section) => {
-      const out = {...r};
-      // Unifier quantité : qte (TA) et qte (TCAM ont rarement qte) → colonne unique "qte"
-      // (déjà ok, TA a qte, TCAM n'a pas qte → pas de conflit)
-      
-      // Unifier prix unitaire : prix_unitaire (TA) et pu (TCAM) → une seule colonne "pu"
-      if (out.prix_unitaire !== undefined) {
-        out.pu = out.prix_unitaire;
-        delete out.prix_unitaire;
-      }
-      // Unifier montant total : prix_total (TA) et montant (TCAM/Dons/Achats) → "montant"
-      if (out.prix_total !== undefined) {
-        out.montant = out.prix_total;
-        delete out.prix_total;
-      }
-      // Achats : montant en négatif (charges)
-      if (section === "achats" && out.montant !== undefined) {
-        out.montant = -Math.abs(parseFloat(out.montant) || 0);
+      const out = {};
+      // Colonnes identité (pas de renommage)
+      ["date","semaine","mois","produit","evenement","fournisseur","typo","destination",
+       "qte","mode","facture_teams","no_facture","commentaire","id"].forEach(k => {
+        if (r[k] !== undefined) out[k] = r[k];
+      });
+      // Prix de vente unitaire (TTC) : prix_unitaire (TA) ou pu (TCAM) ou prix (RC)
+      const puTTC = r.prix_unitaire ?? r.pu ?? null;
+      if (puTTC !== null) out["Prix de vente unitaire"] = puTTC;
+      // HT_PU : ht_unitaire (RC) ou calculé depuis puTTC et tva_rate pour TA
+      if (r.ht_unitaire !== undefined) out["HT_PU"] = r.ht_unitaire;
+      // tva_taux : tva_rate (RC) ou "" pour les autres
+      if (r.tva_rate !== undefined) out["tva_taux"] = r.tva_rate;
+      if (r.tva_unitaire !== undefined) out["tva_unitaire"] = r.tva_unitaire;
+      if (r.tva_total !== undefined) out["tva_total"] = r.tva_total;
+      if (r.ht_total !== undefined) out["ht_total"] = r.ht_total;
+      // montant TTC payé : prix_total (TA) ou montant (TCAM/Dons/RC/Achats)
+      let montantTTC = r.prix_total ?? r.montant ?? null;
+      if (montantTTC !== null) {
+        // Achats : négatif (charges)
+        if (section === "achats") montantTTC = -Math.abs(parseFloat(montantTTC) || 0);
+        out["montant TTC payé"] = montantTTC;
       }
       return out;
     };
@@ -208,9 +212,9 @@
       await Promise.all(cafes.map(async cafe => {
         const [ct,tc,dn,ac,pv,adh,rc] = await Promise.all(["caisseta","tcam","dons","achats","privatisation","adhesion","restocollective"].map(s=>loadData(cafe,s)));
         const all = [{s:"caisseta",d:ct},{s:"tcam",d:tc},{s:"dons",d:dn},{s:"achats",d:ac},{s:"privatisation",d:pv}];
-        all.forEach(({s,d})=>d.filter(filterFn).forEach(r=>rows.push({Café:cafe,Section:s.toUpperCase(),TVA:"",...normalizeRow(r,s)})));
-        explodeAdhesion(adh.filter(filterFn), cafe).forEach(r=>rows.push({...r,TVA:""}));
-        rc.filter(filterFn).forEach(r=>rows.push({Café:cafe,Section:"RESTOCOLLECTIVE",TVA:r.tva_total?.toFixed(2)||"",...normalizeRow(r,"restocollective")}));
+        all.forEach(({s,d})=>d.filter(filterFn).forEach(r=>rows.push({Café:cafe,Section:s.toUpperCase(),...normalizeRow(r,s)})));
+        explodeAdhesion(adh.filter(filterFn), cafe).forEach(r=>rows.push({...r}));
+        rc.filter(filterFn).forEach(r=>rows.push({Café:cafe,Section:"RESTOCOLLECTIVE",...normalizeRow(r,"restocollective")}));
       }));
       return rows;
     };
@@ -413,7 +417,8 @@ ${csv.slice(0,8000)}${csv.length>8000?"…(tronqué)":""}`
       _memCache.set(key, data);
       // 2. localStorage comme backup hors-ligne
       try { localStorage.setItem(_lsKey(cafe,section), JSON.stringify(data)); } catch{}
-      // 3. Supabase : DELETE puis INSERT (évite les doublons sans contrainte UNIQUE)
+      // 3. Supabase : DELETE puis INSERT
+      window.dispatchEvent(new CustomEvent("daddy_save_start"));
       try {
         // Supprimer la ligne existante
         await supaFetch(
@@ -427,6 +432,7 @@ ${csv.slice(0,8000)}${csv.length>8000?"…(tronqué)":""}`
           body: JSON.stringify({ cafe, section, data, updated_at: new Date().toISOString() })
         });
         if (res === null) throw new Error("INSERT failed");
+        window.dispatchEvent(new CustomEvent("daddy_save_done"));
         return true;
       } catch(e) {
         console.error("saveData error:", cafe, section, e.message);
@@ -581,8 +587,7 @@ ${csv.slice(0,8000)}${csv.length>8000?"…(tronqué)":""}`
                   <button onClick={()=>setShow(v=>!v)} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 text-xs">{show?"🙈":"👁️"}</button></div></div>
               {err&&<p className="text-xs text-rose-600 bg-rose-50 px-3 py-2 rounded-lg">{err}</p>}
               <button onClick={submit} style={{backgroundColor:ADMIN_COLOR}} className="w-full hover:opacity-90 text-white font-semibold py-3 rounded-xl transition-opacity shadow-sm">Se connecter</button>
-              <p className="text-center text-xs text-gray-400 mt-3">Build 24/04/2026 05:56</p>
-              <p className="text-center text-xs text-gray-400 mt-3">v3.1 · Build du 15/04/2026 06:17</p>
+              <p className="text-center text-xs text-gray-400 mt-3">v3.2 · Build du 28/04/2026 12:37</p>
             </div>
           </div>
         </div>
@@ -1157,8 +1162,8 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
         setCarte(upd);
         await saveData(cafe,"carte",upd);
       };
-      const add=async()=>{ if(!f.label||!f.prix)return; const prod={id:`c_${Date.now()}`,label:f.label,prix:parseFloat(f.prix),type:f.type}; if(f.type==="Resto Coll.") prod.rcType=f.rcType||"Snacking"; await save([...carte,prod]); setF({label:"",prix:"",type:"Soft",rcType:"Snacking"}); };
-      const saveEdit=async(id)=>{ const upd={...carte.find(c=>c.id===id)||{},label:ef.label,prix:parseFloat(ef.prix),type:ef.type}; if(ef.type==="Resto Coll.") upd.rcType=ef.rcType||"Snacking"; else delete upd.rcType; await save(carte.map(c=>c.id===id?upd:c)); setEditId(null); };
+      const add=async()=>{ if(!f.label||!f.prix)return; const prod={id:`c_${Date.now()}`,label:f.label,prix:parseFloat(f.prix),type:f.type}; if(f.type==="Resto Coll.") prod.rcType=f.rcType||"10"; await save([...carte,prod]); setF({label:"",prix:"",type:"Soft",rcType:"10"}); };
+      const saveEdit=async(id)=>{ const upd={...carte.find(c=>c.id===id)||{},label:ef.label,prix:parseFloat(ef.prix),type:ef.type}; if(ef.type==="Resto Coll.") upd.rcType=ef.rcType||"10"; else delete upd.rcType; await save(carte.map(c=>c.id===id?upd:c)); setEditId(null); };
       const del=async(id)=>await save(carte.filter(c=>c.id!==id));
       const grouped=TYPES_PRODUIT.map(type=>({type,items:carte.filter(c=>c.type===type)}));
       const tBg={Soft:"bg-teal-50 border-teal-200",Alcool:"bg-amber-50 border-amber-200",Snacking:"bg-rose-50 border-rose-200","Resto Coll.":"bg-orange-50 border-orange-200"};
@@ -1172,7 +1177,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
               <div><label className="text-xs text-gray-500 block mb-1">Nom</label><input type="text" placeholder="Ex: Kombucha…" value={f.label} onChange={e=>setF(x=>({...x,label:e.target.value}))} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 w-52"/></div>
               <div><label className="text-xs text-gray-500 block mb-1">Prix (€)</label><input type="number" step="0.5" min="0" value={f.prix} onChange={e=>setF(x=>({...x,prix:e.target.value}))} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 w-24"/></div>
               <div><label className="text-xs text-gray-500 block mb-1">Catégorie</label><select value={f.type} onChange={e=>setF(x=>({...x,type:e.target.value}))} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300">{TYPES_PRODUIT.map(t=><option key={t}>{t}</option>)}</select></div>
-              {f.type==="Resto Coll."&&<div><label className="text-xs text-gray-500 block mb-1">Type TVA</label><select value={f.rcType||"Snacking"} onChange={e=>setF(x=>({...x,rcType:e.target.value}))} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"><option value="Snacking">Snacking (10%)</option><option value="Soft">Soft (20%)</option><option value="Alcool">Alcool (20%)</option></select></div>}
+              {f.type==="Resto Coll."&&<div><label className="text-xs text-gray-500 block mb-1">Type TVA</label><select value={f.rcType||"Snacking"} onChange={e=>setF(x=>({...x,rcType:e.target.value}))} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"><option value="0">0%</option><option value="5.5">5,5%</option><option value="10">10%</option><option value="20">20%</option></select></div>}
               <button onClick={add} className="bg-gray-800 hover:bg-gray-900 text-white px-5 py-2 rounded-xl text-sm font-medium transition-colors">+ Ajouter</button>
             </div>
           </div>
@@ -1186,12 +1191,12 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
                     <><input value={ef.label} onChange={e=>setEf(x=>({...x,label:e.target.value}))} className={`border rounded-lg px-2 py-1 text-sm flex-1 focus:outline-none focus:ring-2 ${tRing[type]}`}/>
                     <input type="number" step="0.5" value={ef.prix} onChange={e=>setEf(x=>({...x,prix:e.target.value}))} className={`border rounded-lg px-2 py-1 text-sm w-20 focus:outline-none focus:ring-2 ${tRing[type]}`}/>
                     <select value={ef.type} onChange={e=>setEf(x=>({...x,type:e.target.value}))} className={`border rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 ${tRing[type]}`}>{TYPES_PRODUIT.map(t=><option key={t}>{t}</option>)}</select>
-                    {ef.type==="Resto Coll."&&<select value={ef.rcType||"Snacking"} onChange={e=>setEf(x=>({...x,rcType:e.target.value}))} className="border border-orange-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"><option value="Snacking">10% Snacking</option><option value="Soft">20% Soft</option><option value="Alcool">20% Alcool</option></select>}
+                    {ef.type==="Resto Coll."&&<select value={ef.rcType||"Snacking"} onChange={e=>setEf(x=>({...x,rcType:e.target.value}))} className="border border-orange-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"><option value="0">0%</option><option value="5.5">5,5%</option><option value="10">10%</option><option value="20">20%</option></select>}
                     <button onClick={()=>saveEdit(item.id)} className="text-emerald-600 hover:text-emerald-700 text-xs font-semibold px-2">✓ Sauver</button>
                     <button onClick={()=>setEditId(null)} className="text-gray-400 hover:text-gray-600 text-xs px-2">Annuler</button></>
                   ):(
                     <><span className="flex-1 text-sm font-medium text-gray-800">{item.label}</span><span className="text-sm font-bold text-gray-700 w-14 text-right">{item.prix.toFixed(2)} €</span>
-                    {item.type==="Resto Coll."&&<span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-medium">{TVA_RATES[item.rcType||"Snacking"]*100|0}% TVA</span>}
+                    {item.type==="Resto Coll."&&<span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-medium">{RC_TVA_RATES[item.rcType] !== undefined ? RC_TVA_RATES[item.rcType]*100 : 10}% TVA</span>}
                     <button onClick={()=>{setEditId(item.id);setEf({label:item.label,prix:item.prix,type:item.type});}} className="text-xs text-gray-400 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-white transition-colors">✏️ Éditer</button>
                     <button onClick={()=>del(item.id)} className="text-xs text-rose-400 hover:text-rose-600 px-2 py-1 rounded-lg hover:bg-white transition-colors">✕</button></>
                   )}
@@ -1228,10 +1233,11 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
 
 
       // Afficher spinner uniquement si chargement EN COURS et aucune donnée encore
-      if (allCafesLoading && Object.keys(allCafesData).length === 0) {
+      if ((allCafesLoading || Object.keys(allCafesData).length === 0) && cafes.length > 0) {
         return <div className="p-12 text-center">
           <div className="text-4xl mb-4">⏳</div>
-          <p className="text-gray-500 font-medium">Chargement des données…</p>
+          <p className="text-gray-500 font-medium">Chargement des données de tous les cafés…</p>
+          <p className="text-sm text-gray-400 mt-2">Cliquez sur 🔄 si le chargement prend trop longtemps</p>
         </div>;
       }
 
@@ -1638,9 +1644,11 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
       useEffect(()=>{ loadData(cafe,"restocollective").then(d=>{ setRows(d); setLoading(false); }); },[cafe,refreshTick]);
 
       const calcTVA = (item) => {
-        // Pour les produits Resto Coll., utiliser rcType pour la TVA
-        const tvaKey = item.rcType || (item.type==="Snacking"?"Snacking":item.type);
-        const rate = TVA_RATES[tvaKey] || 0.20;
+        // Taux TVA RC : rcType est directement le taux ("0","5.5","10","20")
+        // Pour les autres types (Soft, Alcool, Snacking), utiliser TVA_RATES
+        const rate = RC_TVA_RATES[item.rcType] !== undefined
+          ? RC_TVA_RATES[item.rcType]
+          : (TVA_RATES[item.type] || 0.20);
         const ttc  = item.prix;
         const ht   = parseFloat((ttc / (1+rate)).toFixed(4));
         const tva  = parseFloat((ttc - ht).toFixed(4));
@@ -1705,7 +1713,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
             <span className="text-orange-500 text-lg mt-0.5">ℹ️</span>
             <div className="text-xs text-orange-800">
               <strong>TVA appliquée automatiquement</strong> — Prix saisis TTC :<br/>
-              🍽️ Snacking : TVA 10% | 🍴 Restauration Coll. : TVA selon type | 🥤 Softs : TVA 20% | 🍺 Alcools : TVA 20%
+              🍴 Restauration Collective : TVA 0% / 5,5% / 10% / 20% selon produit | 🥤 Softs : 20% | 🍺 Alcools : 20% | 🍽️ Snacking : 10%
             </div>
           </div>
 
@@ -1723,7 +1731,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
                   </div>
                 </div>
               ))}
-              <div className="mt-2"><select value={selProd} onChange={e=>add(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-orange-300"><option value="">+ Ajouter via la liste complète…</option>{carte.map(c=><option key={c.id} value={c.label}>{c.label} ({c.prix}€ TTC — TVA {(TVA_RATES[c.rcType||c.type]||0.20)*100}%)</option>)}</select></div>
+              <div className="mt-2"><select value={selProd} onChange={e=>add(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-orange-300"><option value="">+ Ajouter via la liste complète…</option>{carte.map(c=><option key={c.id} value={c.label}>{c.label} ({c.prix}€ TTC — TVA {RC_TVA_RATES[c.rcType]!==undefined?RC_TVA_RATES[c.rcType]*100:(TVA_RATES[c.type]||0.20)*100}%)</option>)}</select></div>
             </div>
 
             {/* Panier */}
@@ -1821,6 +1829,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
       });
       const [rcEnabled,setRcEnabled] = useState({});
       const [saveError,setSaveError] = useState(null);
+      const [saving,setSaving] = useState(false);
       const [supaStatus,setSupaStatus] = useState(null);
       const [subTabAdmin,setSubTabAdmin] = useState("dashboard");
       const [allCafesData,setAllCafesData] = useState({});
@@ -1852,14 +1861,23 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
         return () => window.removeEventListener("rc_updated", h);
       }, []);
 
-      // Save error notification
+      // Indicateur de sauvegarde
       useEffect(()=>{
-        const h = (e) => {
-          setSaveError("\u274C Erreur sauvegarde (" + (e.detail?.section||"?") + ") \u2014 v\u00e9rifiez votre connexion internet.");
-          setTimeout(()=>setSaveError(null), 7000);
+        const onStart = () => { setSaving(true); };
+        const onDone  = () => { setSaving(false); };
+        const onError = (e) => {
+          setSaving(false);
+          setSaveError("⚠️ Sauvegarde en attente (retry auto)…");
+          setTimeout(()=>setSaveError(null), 5000);
         };
-        window.addEventListener("daddy_save_error", h);
-        return () => window.removeEventListener("daddy_save_error", h);
+        window.addEventListener("daddy_save_start", onStart);
+        window.addEventListener("daddy_save_done",  onDone);
+        window.addEventListener("daddy_save_error", onError);
+        return () => {
+          window.removeEventListener("daddy_save_start", onStart);
+          window.removeEventListener("daddy_save_done",  onDone);
+          window.removeEventListener("daddy_save_error", onError);
+        };
       }, []);
 
       // Auto-reports
@@ -1908,10 +1926,19 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
 
       // Déclencher le chargement dès que globalView=true ET cafes disponibles
       useEffect(()=>{
+        if (!globalView) return;
+        if (allCafesLoaded) return;
+        if (_loadingRef.current) return;
+        if (cafes.length === 0) return; // cafes pas encore chargés, l'effect se relancera
+        loadAllCafes();
+      }, [globalView, allCafesLoaded, cafes.length]);
+
+      // Si globalView=true mais cafes encore vide, réessayer dès que cafes arrive
+      useEffect(()=>{
         if (globalView && cafes.length > 0 && !allCafesLoaded && !_loadingRef.current) {
           loadAllCafes();
         }
-      }, [globalView, allCafesLoaded, cafes.length]);
+      }, [cafes]);
 
       // Login screen
       if (!session) {
@@ -1921,10 +1948,10 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
             setSelCafe(cafes[0]||null);
             setSubTabAdmin("dashboard");
             setGlobalView(true);
-            // Forcer le chargement après le rendu (cafes sera disponible)
+            // Forcer le chargement après le rendu
             setTimeout(() => {
-              if (!_loadingRef.current) loadAllCafes();
-            }, 100);
+              if (cafes.length > 0 && !_loadingRef.current) loadAllCafes();
+            }, 200);
           } else {
             setSelCafe(s.cafe);
             setGlobalView(false);
@@ -1983,7 +2010,7 @@ GRANT ALL ON daddy_data TO anon;`}</pre>
                   {/* Statut Supabase */}
                   <span title={supaStatus===null?"Test connexion…":supaStatus?"Base de données connectée — données partagées entre tous les utilisateurs":"⚠️ Base de données inaccessible — données sauvegardées localement uniquement"}
                     className={`hidden sm:flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border ${supaStatus===null?"bg-white/10 border-white/20 opacity-60":supaStatus?"bg-emerald-500/20 border-emerald-300/40":"bg-rose-500/30 border-rose-300/40"}`}>
-                    <span>{supaStatus===null?"⏳":supaStatus?"🟢":"🔴"}</span>
+                    <span>{saving?"💾":supaStatus===null?"⏳":supaStatus?"🟢":"🔴"}</span>
                     <span className="hidden md:inline">{supaStatus===null?"…":supaStatus?"DB":"Hors ligne"}</span>
                   </span>
                   {/* Déconnexion */}
